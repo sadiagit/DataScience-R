@@ -1,0 +1,109 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+```{r}
+library(tidyverse)
+library(dslabs)
+data(temp_carbon)
+data(greenhouse_gases)
+data(historic_co2)
+data(temp_carbon)
+```
+latest year of carbon emission
+```{r}
+ temp_carbon %>%
+    filter(!is.na(carbon_emissions)) %>%
+    pull(year) %>%
+    max()
+        
+```
+First year of carbon emission reported
+```{r}
+ first_year <- temp_carbon %>%
+    filter(!is.na(carbon_emissions)) %>%
+    pull(year) %>%
+    min()
+ce_fy <- temp_carbon %>% filter(year==1751) %>% .$carbon_emissions
+ce_ly <- temp_carbon %>% filter(year==2014) %>% .$carbon_emissions
+ce_ly/ce_fy
+
+```
+Difference in carbon temperature
+
+```{r}
+max_year =temp_carbon %>% filter(!is.na(temp_anomaly)) %>% .$year %>% max()
+min_year =temp_carbon %>% filter(!is.na(temp_anomaly)) %>% .$year %>% min()
+temp_ly <- temp_carbon %>% filter(year==2018) %>% .$temp_anomaly
+temp_fy <- temp_carbon %>% filter(year==1880) %>% .$temp_anomaly
+temp_ly/temp_fy
+```
+
+Create a time series line plot of the temperature anomaly. Only include years where temperatures are reported. Save this plot to the object p
+```{r}
+p =temp_carbon %>% filter(!is.na(temp_anomaly)) %>% ggplot(aes(x=year, y=temp_anomaly))+geom_line()
+p <- p + geom_hline(aes(yintercept = 0), col = "blue")
+p <- p+geom_line(aes(x=year, y=ocean_anomaly), col="red")+geom_line(aes(x=year, y=land_anomaly), col="green")
+p + ylab("Temperature anomaly (degrees C)") +
+    ggtitle("Temperature anomaly relative to 20th century mean, 1880-2018") +
+    geom_text(aes(x = 2000, y = 0.05, label = "20th century mean"), col = "blue")
+
+
+
+```
+```{r}
+library(tidyverse)
+library(dslabs)
+data(temp_carbon)
+data(greenhouse_gases)
+data(historic_co2)
+head(greenhouse_gases)
+greenhouse_gases %>% filter(gas == 'CO2') %>% arrange(desc(year))
+greenhouse_gases %>% filter(gas == 'N2O') %>% arrange(desc(year))
+greenhouse_gases %>% filter(gas == 'CH4') %>% arrange(desc(year))
+
+
+```
+```{r}
+greenhouse_gases %>%
+    ggplot(aes(x=year, y=concentration)) +
+    geom_line() +
+    facet_grid(gas~., scales = "free") +
+    geom_vline(xintercept = 1850) +
+    ylab("Concentration (ch4/n2o ppb, co2 ppm)") +
+    ggtitle("Atmospheric greenhouse gas concentration by year, 0-2000")
+```
+```{r}
+temp_carbon %>% filter(!is.na(carbon_emissions)) %>%
+    ggplot(aes(x = year, y=carbon_emissions)) +
+    geom_line()+
+     geom_vline(xintercept = 1850) 
+```
+
+```{r}
+data("historic_co2")
+
+
+co2_time <- historic_co2 %>% filter(!is.na(co2)) %>% 
+    ggplot(aes(x=year, y=co2, col=source))+
+               geom_line()
+  
+# co2_time <- co2_time + xlim(-800000,-775000)
+co2_time + xlim(-3000,2018)
+```
+

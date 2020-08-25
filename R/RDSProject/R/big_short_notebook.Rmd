@@ -1,0 +1,201 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+```{r}
+library(tidyverse)
+library(dslabs)
+data(death_prob)
+head(death_prob)
+```
+
+```{r}
+#death probability of 50 year old female
+p <- death_prob %>% filter(age == 50  & sex == "Female") %>% .$prob
+q <- 1-p
+#The loss in the event of the policy holder's death is -$150,000 and the gain if the policy holder remains alive is the premium $1,150.
+#What is the expected value of the company's net profit on one policy for a 50 year old female?
+l <- -150000
+g <- 1150
+n <- 1000
+Es <- l*p+g*q
+Se <- abs(g-l)*sqrt(p*(1-p))
+
+#Expected value of the companies profit over all 1000 policies
+nEs <- Es*1000
+
+#What is the standard error of the sum of the expected value over all 1,000 policies for 50 year old females?
+nSe <- sqrt(n)*Se
+
+pnorm(0,nEs,nSe)
+
+```
+```{r}
+#death probability of 50 year old female
+p <- death_prob %>% filter(age == 50  & sex == "Male") %>% .$prob
+q <- 1-p
+l <- -150000
+
+#Suppose the company wants its expected profits from 1,000 50 year old males with $150,000 life insurance policies to be $700,000. Use the formula for expected value of the sum of draws with the following values and solve for the premium  b :
+n <- 1000
+Es <- 700000
+g <- (Es/n-l*p)/q
+
+#Using the new 50 year old male premium rate, calculate the standard error of the sum of 1,000 premiums.
+Se <- sqrt(n)*abs(l-g)*sqrt(p*q)
+Se
+
+#What is the probability of losing money on a series of 1,000 policies to 50 year old males?
+#P(S <0)
+pnorm(0,Es,Se)
+```
+```{r}
+#In this 6-part question, we'll look at a scenario in which a lethal pandemic disease increases the probability of death within 1 year for a 50 year old to .015. Unable to predict the outbreak, the company has sold 1,000 $150,000 life insurance policies for $1,150.
+p <- 0.015
+q <- 1 - p
+g <- 1150
+l <- -150000
+n <- 1000
+
+Es <- n*(l*p +  g*q)
+Se <- sqrt(n)*abs(l-g)*sqrt(p*q)
+
+#What is the probability of the company losing money? P(S < 0)
+pnorm(0,Es,Se)
+
+#What is the probability of losing more than $1 million?
+pnorm(-1000000,Es,Se)
+
+#Investigate death probabilities p <- seq(.01, .03, .001).
+
+#What is the lowest death probability for which the chance of losing money exceeds 90%?
+
+f <- function(p,lm){
+  
+  q <- 1 - p
+  g <- 1150
+  l <- -150000
+  n <- 1000
+  Es <- n *(l*p+g*q)
+  Se <- sqrt(n)*abs(l-g)*sqrt(p*q)
+  
+  pnorm(lm,Es,Se)
+}
+p <- seq(.01, .03, .001)
+
+p[which(sapply(p,f, lm=0) > 0.9)]
+
+##What is the lowest death probability for which the chance of losing money exceeds 90%?
+p[which(sapply(p,f, lm=-1000000) > 0.9)]
+```
+```{r}
+# Define a sampling model for simulating the total profit over 1,000 loans with probability of claim p_loss = .015, loss of -$150,000 on a claim, and profit of $1,150 when there is no claim. Set the seed to 25, then run the model once.
+# 
+# (IMPORTANT! If you use R 3.6 or later, you will need to use the command set.seed(x, sample.kind = "Rounding") instead of set.seed(x). Your R version will be printed at the top of the Console window when you start RStudio.)
+# 
+# What is the reported profit (or loss) in millions (that is, divided by  106 )?
+set.seed(25, sample.kind = "Rounding")
+g <- 1150
+l <- -150000
+n <- 1000
+p_loss <- .015
+S <- sample(c(l,g),n, replace=TRUE, prob=c(p_loss, 1-p_loss))
+sum(S)/1000000
+```
+```{r}
+#Set the seed to 27, then run a Monte Carlo simulation of your sampling model with 10,000 replicates to simulate the range of profits/losses over 1,000 loans.
+
+# (IMPORTANT! If you use R 3.6 or later, you will need to use the command set.seed(x, sample.kind = "Rounding") instead of set.seed(x). Your R version will be printed at the top of the Console window when you start RStudio.)
+# 
+# What is the observed probability of losing $1 million or more?
+
+set.seed(27, sample.kind = "Rounding")
+g <- 1150
+l <- -150000
+n <- 1000
+p_loss <- .015
+B <- 10000
+S <- replicate(B, {
+  X <- sample(c(l,g),n, replace=TRUE, prob=c(p_loss, 1-p_loss))
+  sum(X)/1000000
+  
+})
+
+mean(S < -1)
+```
+```{r}
+#Calculate the premium required for a 5% chance of losing money given  n=1000  loans, probability of death  p=0.015 , and loss per claim  l=−150000 . Save this premium as x for use in further questions.
+
+p_loss <- 0.05
+n <- 1000
+p <- 0.015
+l <- -150000
+z <- qnorm(0.05)
+x <- -l*( n*p - z*sqrt(n*p*(1-p)))/ ( n*(1-p) + z*sqrt(n*p*(1-p)))
+Es <- n*(l*p+x*(1-p))
+Es
+```
+
+```{r}
+# Run a Monte Carlo simulation with B=10000to determine the probability of losing money on 1,000 policies given the new premium x, loss on a claim of $150,000, and probability of claim  p=.015 . Set the seed to 28 before running your simulation.
+# 
+# (IMPORTANT! If you use R 3.6 or later, you will need to use the command set.seed(x, sample.kind = "Rounding") instead of set.seed(x). Your R version will be printed at the top of the Console window when you start RStudio.)
+# 
+# What is the probability of losing money here?
+
+set.seed(28, sample.kind = "Rounding")
+g <-  3268.063
+l <- -150000
+n <- 1000
+p_loss <- .015
+B <- 10000
+S <- replicate(B, {
+  X <- sample(c(l,g),n, replace=TRUE, prob=c(p_loss, 1-p_loss))
+  sum(X)
+  
+})
+mean(S < 0)
+
+```
+
+```{r}
+#The company cannot predict whether the pandemic death rate will stay stable. Set the seed to 29, then write a Monte Carlo simulation that for each of  B=10000  iterations:
+
+# randomly changes  p  by adding a value between -0.01 and 0.01 with sample(seq(-0.01, 0.01, length = 100), 1)
+# uses the new random  p  to generate a sample of  n=1,000  policies with premium x and loss per claim  l=−150000 
+# returns the profit over  n  policies (sum of random variable)
+# (IMPORTANT! If you use R 3.6 or later, you will need to use the command set.seed(x, sample.kind = "Rounding") instead of set.seed(x). Your R version will be printed at the top of the Console window when you start RStudio.)
+# 
+# The outcome should be a vector of  B  total profits. Use the results of the Monte Carlo simulation to answer the following three questions.
+
+set.seed(29, sample.kind = "Rounding")
+g <-  3268.063
+l <- -150000
+n <- 1000
+
+B <- 10000
+S <- replicate(B, {
+  p_loss = 0.015 + sample(seq(-0.01, 0.01, length = 100), 1)
+  X <- sample(c(l,g),n, replace=TRUE, prob=c(p_loss, 1-p_loss))
+  sum(X)
+  
+})
+mean(S) # mean profit
+mean(S < 0) #probability of losing money?
+mean(S/1000000 < -1) #probability of losing more than $1 million?
+```
+
