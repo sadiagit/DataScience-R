@@ -1,0 +1,70 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+```{r}
+golfer_stat=read.table("http://www.stat.ufl.edu/~winner/data/pgalpga2008.dat",header=T)
+attach(golfer_stat)
+names(golfer_stat) <- c("avg_driving_dist","drive_perc","gender")
+names(golfer_stat)
+
+```
+Separate LPGA and PGA data by female and find correlation
+```{r}
+nrow(golfer_stat)
+datF <- subset(golfer_stat, gender==1, select=1:2)
+pairs(datF)
+```
+Separate LPGA and PGA data by female and find correlation
+```{r}
+
+datM <- subset(golfer_stat, gender==2, select=1:2)
+pairs(datM)
+```
+Fitting female driver
+```{r}
+#linear regression
+lm(drive_perc~avg_driving_dist, datF)
+summary(lm(drive_perc~avg_driving_dist, datF))
+datF.lm <- lm(drive_perc~avg_driving_dist, datF)
+plot(datF)
+#lines(avg_driving_dist~fitted(datF.lm))
+coef(datF.lm)
+coef(datF.lm)[1] + coef(datF.lm)[2]*260
+
+-0.2569  - 0.0444 *qt(.975,154)
+-0.2569  + 0.0444 *qt(.975,154)
+
+predict(datF.lm, data.frame(avg_driving_dist=260),interval="predict")
+
+```
+```{r}
+
+modify_gender<- function(g){
+  if (g==1) 0 else 1
+}
+golfer_stat$gender =  sapply(golfer_stat$gender, modify_gender)
+
+summary(lm(drive_perc~avg_driving_dist+gender,golfer_stat))
+golfer_stat.lm<- lm(drive_perc~avg_driving_dist+gender,golfer_stat)
+#mean(datF$avg_driving_dist)
+#mean(datM$avg_driving_dist)
+
+plot(fitted(golfer_stat.lm), residuals(golfer_stat.lm))
+
+```
+
