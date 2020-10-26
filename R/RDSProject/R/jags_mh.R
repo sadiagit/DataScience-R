@@ -31,3 +31,6 @@ summary(mod_sim)
 
 library("coda")
 plot(mod_sim)
+
+
+

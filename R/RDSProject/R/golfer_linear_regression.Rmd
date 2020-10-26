@@ -67,4 +67,3 @@ golfer_stat.lm<- lm(drive_perc~avg_driving_dist+gender,golfer_stat)
 plot(fitted(golfer_stat.lm), residuals(golfer_stat.lm))
 
 ```
-
