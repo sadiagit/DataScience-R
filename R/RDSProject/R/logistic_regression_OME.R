@@ -1,4 +1,5 @@
 library("MASS")
+library("rjags")
 data("OME")
 ?OME # background on the data
 head(OME)
@@ -13,7 +14,6 @@ plot(dat$OME, dat$Correct / dat$Trials )
 plot(dat$Loud, dat$Correct / dat$Trials )
 plot(dat$Noise, dat$Correct / dat$Trials )
 
-install.packages("corrplot")
 library("corrplot")
 Cor = cor(dat)
 corrplot(Cor, type="upper", method="ellipse", tl.pos="d")
@@ -74,3 +74,6 @@ head(phat_all)
 
 tab0.7 = table(phat_all > 0.7, (dat$Correct / dat$Trials) > 0.7)
 sum(diag(tab0.7)) / sum(tab0.7)
+
+dic1 = dic.samples(mod_ome, n.iter=1e3)
+

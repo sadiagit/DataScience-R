@@ -35,3 +35,17 @@ heights[18, "ht_cm"]
 females <- heights %>% filter(sex == 'Female')
 dim(females)
 mean(females$ht_cm)
+library(dslabs)
+data(olive)
+head(olive)
+?olive
+
+plot(olive$palmitoleic, olive$stearic)
+
+pairs(olive[,3:9])
+hist(olive$eicosenoic)
+boxplot(palmitic ~ region,data=olive)
+
+data("CO2")
+head(CO2)
+CO2
