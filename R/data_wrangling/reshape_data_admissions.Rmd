@@ -1,0 +1,14 @@
+title: "reshape_Data"
+author: "Sadia Boksh"
+date: "19/11/2020"
+output: github_document
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dslabs)
+data(admissions)
+dat <- admissions %>% select(-applicants)
+```

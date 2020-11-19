@@ -1,0 +1,30 @@
+---
+title: "reshape_Data"
+author: "Sadia Boksh"
+date: "19/11/2020"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(tidyverse)
+library(dslabs)
+library(rmarkdown)
+data("co2")
+```
+# Reshape Data
+
+Change wide data to tidy data by gathering.
+```{r}
+ co2_wide <- data.frame(matrix(co2, ncol = 12, byrow = TRUE)) %>% 
+      setNames(1:12) %>%
+    mutate(year = as.character(1959:1997))
+co2_tidy <- gather(co2_wide,month,co2,-year)
+```
+# Plots
+```{r}
+co2_tidy %>% ggplot(aes(as.numeric(month), co2, color = year)) + geom_line()
+```
+There is a seasonal effect and CO2 concentrations are highest around May and the yearly average increased from 1959 to 1997.
