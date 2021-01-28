@@ -1,0 +1,133 @@
+---
+title: "machine_learning"
+author: "Sadia Boksh"
+date: "28/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dslabs)
+library(dplyr)
+
+```
+
+```{r}
+data(heights)
+heights
+str(heights)
+heights[777,"height"]
+heights$sex[777]
+heights[777,1]
+heights[which.max(heights$height), "height"]
+heights[which.min(heights$height), "height"]
+median(heights$height)
+
+mean(heights$sex == "Male")
+heights %>% filter(height > 78 & sex== "Female") %>% count()
+```
+
+```{r}
+mnist <- read_mnist()
+str(mnist)
+head(mnist$train,1)
+ncol(mnist$train$images)
+```
+```{r}
+library(dslabs)
+library(dplyr)
+library(lubridate)
+library(caret)
+data(reported_heights)
+
+dat <- mutate(reported_heights, date_time = ymd_hms(time_stamp)) %>%
+  filter(date_time >= make_date(2016, 01, 25) & date_time < make_date(2016, 02, 1)) %>%
+  mutate(type = ifelse(day(date_time) == 25 & hour(date_time) == 8 & between(minute(date_time), 15, 30), "inclass","online")) %>%
+  select(sex, type)
+
+y <- factor(dat$sex, c("Female", "Male"))
+x <- dat$type
+
+#proportions
+dat %>% group_by(type, sex) %>% summarize(n=n()) %>% mutate(prop = n/sum(n))
+
+#prediction by guessing
+y_hat <- ifelse(x == "inclass" ,"Female", "Male") %>% factor(levels=levels(y))
+mean(y == y_hat)
+
+table(predicted=y_hat, actual=y)
+table(y_hat, y)
+
+confusionMatrix(y_hat,y)
+
+
+```
+
+# Conditional Probability
+```{r}
+
+# set.seed(1) # if using R 3.5 or earlier
+set.seed(1, sample.kind = "Rounding") # if using R 3.6 or later
+disease <- sample(c(0,1), size=1e6, replace=TRUE, prob=c(0.98,0.02))
+test <- rep(NA, 1e6)
+test[disease==0] <- sample(c(0,1), size=sum(disease==0), replace=TRUE, prob=c(0.90,0.10))
+test[disease==1] <- sample(c(0,1), size=sum(disease==1), replace=TRUE, prob=c(0.15, 0.85))
+
+#probability a test is positive
+mean(test)
+
+#What is the probability that an individual has the disease if the test is negative
+mean(disease[test == 0])
+
+#probability of having disease if tested positive
+pr_d_t<- mean(disease[test == 1])
+
+#If a patient's test is positive, by how many times does that increase their risk of having the disease?
+pr_d_t/0.02
+
+```
+# Heights
+
+```{r}
+
+
+library(dslabs)
+data("heights")
+```
+
+#Plot the estimated conditional probability  P(x)=Pr(Male|height=x)  for each  x
+```{r}
+heights %>% mutate(height = round(height)) %>% group_by(height, sex) %>% summarise(p = mean(sex == "Male") ) %>%
+  qplot(height, p, data =.)
+```
+```{r}
+#the cut() function to assure each group has the same numb/er of points
+ps <- seq(0, 1, 0.1)
+
+heights %>% cut(height, quantile(heights$height, ps))
+ quantile(heights$height, ps)
+ cut(heights$height, quantile(heights$height, ps), include.lowest = TRUE)
+
+heights %>% 
+	mutate(g = cut(height, quantile(height, seq(0, 1, 0.1)), include.lowest = TRUE))%>%
+	group_by(g) %>%
+	summarize(p = mean(sex == "Male"), height = mean(height)) %>%
+	qplot(height, p, data =.)
+```
+
+```{r}
+
+Sigma <- 9*matrix(c(1,0.5,0.5,1), 2, 2)
+dat <- MASS::mvrnorm(n = 10000, c(69, 69), Sigma) %>%
+	data.frame() %>% setNames(c("x", "y"))
+
+head(dat)
+
+ps <- seq(0, 1, 0.1)
+dat %>% 
+	mutate(g = cut(x, quantile(x,ps), include.lowest = TRUE)) %>%
+  group_by(g)%>%
+  summarize(x=mean(x), y=mean(y)) %>%
+	qplot(x, y, data =.)
+```
+

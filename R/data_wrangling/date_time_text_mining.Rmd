@@ -1,0 +1,83 @@
+```{r}
+library(lubridate)
+library(dplyr)
+library(dslabs)
+data(brexit_polls)
+head(brexit_polls)
+april <- brexit_polls %>% filter(month(startdate) ==4) 
+nrow(april)
+
+april_20160612 <- brexit_polls %>% filter(round_date(enddate, unit="week", week_start = 7) == "2016-06-12") 
+nrow(april_20160612)
+
+brexit_polls %>% mutate(weekdays_end = weekdays(brexit_polls$enddate)) %>%
+                  count(weekdays_end) %>% top_n(1,n)
+
+```
+```{r}
+data(movielens)
+?as_datetime
+year_most_reviews <- movielens %>% mutate(moviedate =  as_datetime(timestamp, tz="UTC")) %>% count(year(moviedate)) %>% top_n(20,n) %>% arrange(desc(n))
+hour_most_review < movielens %>% mutate(moviedate =  as_datetime(timestamp, tz="UTC")) %>% count(hour(moviedate)) %>% top_n(1,n)
+
+?movielens
+
+```
+
+```{r}
+
+library(tidyverse)
+library(gutenbergr)
+library(tidytext)
+options(digits = 3)
+```
+```{r}
+?str_detect
+gutenberg_metadata %>% filter(str_detect(title, "Pride and Prejudice"))
+?gutenberg_works
+
+gutenberg_works(title == "Pride and Prejudice")
+words<- gutenberg_download(1342) %>% unnest_tokens(word, text) %>% 
+                             filter(!word %in% stop_words$word & !str_detect(word, "(\\d+)"))  
+
+gutenberg_download(1342) %>% unnest_tokens(word, text) %>% 
+                             filter(!word %in% stop_words$word & !str_detect(word, "(\\d+)"))                               %>% count(word) %>% filter(n>100) %>% arrange(desc(n))              
+```
+
+```{r}
+afinn <- get_sentiments("afinn")
+afinn_sentiments <- words %>% inner_join(afinn)
+mean(afinn_sentiments$value >0)
+afinn_sentiments %>% count(value) %>% filter(value ==4)
+
+
+
+problems <- c("5.3", "5,5", "6 1", "5 .11", "5, 12")
+pattern_with_groups <- "^([4-7])[,\\.](\\d*)$"
+str_replace(problems, pattern_with_groups, "\\1'\\2")
+
+problems <- c("5.3", "5,5", "6 1", "5 .11", "5, 12")
+pattern_with_groups <- "^([4-7])[,\\.\\s](\\d*)$"
+str_replace(problems, pattern_with_groups, "\\1'\\2")
+```
+```{r}
+library(rvest)
+library(tidyverse)
+library(stringr)
+url <- "https://en.wikipedia.org/w/index.php?title=Opinion_polling_for_the_United_Kingdom_European_Union_membership_referendum&oldid=896735054"
+tab <- read_html(url) %>% html_nodes("table")
+polls <- tab[[5]] %>% html_table(fill = TRUE)
+
+colnames(polls) <- c("dates", "remain", "leave", "undecided", "lead", "samplesize", "pollster", "poll_type", "notes")
+
+nrow(polls)
+polls <- polls %>% filter(str_detect(remain,"%$"))
+nrow(polls)
+polls %>% mutate(remain_prop = parse_number(polls$remain)/100)
+polls %>% filter(str_detect(undecided,"N/A"))
+
+str_replace(polls$undecided,"N/A","0")
+
+temp <- str_extract_all(polls$dates,)
+end_date <- sapply(temp, function(x) x[length(x)]) # take last element (handles polls that cross month boundaries)
+```

@@ -1,0 +1,146 @@
+---
+title: "regularization"
+author: "Sadia Boksh"
+date: "27/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(digits=7) #controls the # of significant digits
+library(dplyr)
+library(ggplot2)
+
+```
+Let's simulate a dataset for 1000 schools. First, let's simulate the number of students in each school, using the following code
+
+```{r}
+
+set.seed(1986, sample.kind="Rounding") # if using R 3.6 or later
+n <- round(2^rnorm(1000, 8, 1))
+
+range(n)
+```
+
+Now let's assign a true quality for each school that is completely independent from size. This is the parameter we want to estimate in our analysis. The true quality can be assigned using the following code:
+
+```{r}
+
+set.seed(1, sample.kind="Rounding") # if using R 3.6 or later
+mu <- round(80 + 2*rt(1000, 5))
+range(mu)
+schools <- data.frame(id = paste("PS",1:1000),
+                      size = n,
+                      quality = mu,
+                      rank = rank(-mu))
+
+schools %>% top_n(10, quality) %>% arrange(desc(quality))
+```
+
+Now let's have the students in the school take a test. There is random variability in test taking, so we will simulate the test scores as normally distributed with the average determined by the school quality with a standard deviation of 30 percentage points. This code will simulate the test scores:
+
+```{r}
+
+set.seed(1, sample.kind="Rounding") # if using R 3.6 or later
+mu <- round(80 + 2*rt(1000, 5))
+
+scores <- sapply(1:nrow(schools), function(i){
+       scores <- rnorm(schools$size[i], schools$quality[i], 30)
+       scores
+})
+schools <- schools %>% mutate(score = sapply(scores, mean))
+
+```
+
+What are the top schools based on the average score? Show just the ID, size, and the average score.
+
+```{r}
+
+top_10<- schools %>% top_n(10,score) %>% arrange(desc(score))
+
+median(top_10$size)
+
+#overall school size
+median(schools$size)
+
+#worst 10 schools
+worst_10<- schools %>%  arrange((score)) %>% head(10)
+median(worst_10$size)
+
+
+#plot avg score vs school size
+
+schools %>% ggplot(aes(x=size, y=score, size=size)) +geom_point(data = filter(schools, rank<=10), col = 2) +geom_smooth()
+
+ schools %>% ggplot(aes(size, score, size=size)) +
+	geom_point(alpha = 0.5) +
+	geom_point(data = filter(schools, rank<=10), col = 2)
+
+```
+
+
+#Regularization
+
+```{r}
+library(caret)
+
+overall <- mean(sapply(scores, mean))
+
+alpha <- 135
+score_reg <- sapply(scores, function(x)  overall + sum(x-overall)/(length(x)+alpha))
+schools %>% mutate(score_reg = score_reg) %>%
+	top_n(10, score_reg) %>% arrange(desc(score_reg))
+
+alpha <- seq(10,250, by=1)
+rmses <- sapply(alpha, function(a){
+   scores_reg <- sapply(scores, function(x){
+     overall+sum(x-overall)/(length(x)+a)
+   })
+  
+  RMSE(schools$quality,scores_reg)
+})
+
+alpha[which.min(rmses)]
+```
+
+A common mistake made when using regularization is shrinking values towards 0 that are not centered around 0. For example, if we don't subtract the overall average before shrinking, we actually obtain a very similar result. Confirm this by re-running the code from the exercise in Q6 but without removing the overall mean.
+
+```{r}
+
+alpha <- seq(10,250, by=1)
+rmses <- sapply(alpha, function(a){
+   scores_reg <- sapply(scores, function(x){
+     sum(x)/(length(x)+a)
+   })
+  
+  RMSE(schools$quality,scores_reg)
+})
+
+alpha[which.min(rmses)]
+```
+
+
+```{r}
+library(dslabs)
+library(dplyr)
+data(heights)
+
+v = ifelse(heights$sex == 'Female', 1, 2)
+
+sum(v)
+
+
+v1 = ifelse(heights$height > 72, heights$height, 0)
+
+mean(v1)
+
+inches_to_ft  <- function(inch){
+   
+   inch/12
+}
+
+inches_to_ft(144)
+
+indx <- inches_to_ft(heights$height) < 5
+nrow(heights[indx,])
+```

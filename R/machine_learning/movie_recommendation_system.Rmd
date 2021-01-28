@@ -1,0 +1,110 @@
+---
+title: "recommendation_system"
+author: "Sadia Boksh"
+date: "20/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dslabs)
+library(lubridate)
+data("movielens")
+```
+
+```{r}
+movielens %>% as_tibble()
+
+```
+```{r}
+library(caret)
+set.seed(755)
+test_index <- createDataPartition(y = movielens$rating, times = 1, p = 0.2, 
+                                  list = FALSE)
+train_set <- movielens[-test_index,]
+test_set <- movielens[test_index,]
+
+test_set <- test_set %>% 
+  semi_join(train_set, by = "movieId") %>%
+  semi_join(train_set, by = "userId")
+
+
+```
+
+# Data Exploration
+
+Compute the number of ratings for each movie and then plot it against the year the movie came out using a boxplot for each year. Use the square root transformation on the y-axis (number of ratings) when creating your plot.
+
+What year has the highest median number of ratings?
+
+```{r}
+ratings <- movielens %>% group_by(movieId) %>% summarize(n_ratings = n(), year=year)
+
+movielens %>% 
+    group_by(movieId) %>% 
+    summarize(n_of_ratings = sqrt(n()), year = year) %>% ggplot(aes(x=year, y=n_of_ratings, group=year)) + geom_boxplot()
+
+
+
+
+
+
+
+movielens %>% group_by(movieId) %>%
+	summarize(n = n(), year = as.character(first(year))) %>%
+	qplot(year, n, data = ., geom = "boxplot") +
+	coord_trans(y = "sqrt") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+
+```
+
+We see that, on average, movies that came out after 1993 get more ratings. We also see that with newer movies, starting in 1993, the number of ratings decreases with year: the more recent a movie is, the less time users have had to rate it.
+
+Among movies that came out in 1993 or later, select the top 25 movies with the highest average number of ratings per year (n/year), and caculate the average rating of each of them. To calculate number of ratings per year, use 2018 as the end year.
+
+What is the average rating for the movie The Shawshank Redemption?
+
+```{r}
+movie_ratings <- movielens %>% group_by(movieId) %>%
+    summarize(title = title[1], n = n(), years = 2018 - first(year), rating = mean(rating), rate = n/years) %>%
+    arrange (desc(rate)) %>%
+    ggplot(aes(x=rate, y=rating)) +geom_point()
+
+ movielens %>% 
+	filter(year >= 1993) %>%
+	group_by(movieId) %>%
+	summarize(n = n(), years = 2018 - first(year),
+				title = title[1],
+				rating = mean(rating)) %>%
+	mutate(rate = n/years) %>%
+	ggplot(aes(rate, rating)) +
+	geom_point() +
+	geom_smooth()
+ 
+ 
+ movielens<- mutate(movielens, date = as_datetime(timestamp))
+ 
+ 
+ movielens %>% mutate(week_n=round_date(date, unit="week")) %>% group_by(week_n) %>% summarise(avg_rating =  mean(rating), date=date[1]) %>% ggplot(aes(x=date, y=avg_rating)) + geom_point() + geom_smooth()
+ 
+```
+
+
+The movielens data also has a genres column. This column includes every genre that applies to the movie. Some movies fall under several genres. Define a category as whatever combination appears in this column. Keep only categories with more than 1,000 ratings. Then compute the average and standard error for each category. Plot these as error bar plots.
+
+Which genre has the lowest average rating?
+
+
+```{r}
+ 
+movielens %>% group_by(genres) %>%
+              summarize(n_of_ratings =  n()) %>%
+              filter(n_of_ratings > 1000) %>%
+              left_join(movielens , by="genres") %>%
+              group_by(genres) %>%
+              summarise(n=n(),avg_rating = mean(rating), se=sd(rating)/sqrt(n)) %>% ggplot(aes(x=genres, y=avg_rating))+geom_errorbar(aes(ymin=avg_rating-2*se,ymax=avg_rating+2*se))+theme(axis.text  = element_text(angle = 90))
+```
+

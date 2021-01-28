@@ -1,5 +1,5 @@
 ---
-title: "reshape_Data"
+title: "Reshape Data Co2"
 author: "Sadia Boksh"
 date: "19/11/2020"
 output: github_document
@@ -8,7 +8,7 @@ output: github_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-```{r}
+```{r include=FALSE}
 library(tidyverse)
 library(dslabs)
 library(rmarkdown)
@@ -27,4 +27,5 @@ co2_tidy <- gather(co2_wide,month,co2,-year)
 ```{r}
 co2_tidy %>% ggplot(aes(as.numeric(month), co2, color = year)) + geom_line()
 ```
+
 There is a seasonal effect and CO2 concentrations are highest around May and the yearly average increased from 1959 to 1997.

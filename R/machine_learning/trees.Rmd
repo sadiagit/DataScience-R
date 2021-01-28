@@ -1,0 +1,133 @@
+---
+title: "Tree Models"
+author: "Sadia Boksh"
+date: "13/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Decision Tree
+
+Create a simple dataset where the outcome grows 0.75 units on average for every increase in a predictor, using this code:
+```{r}
+library(rpart)
+n <- 1000
+sigma <- 0.25
+# set.seed(1) # if using R 3.5 or earlier
+set.seed(1, sample.kind = "Rounding") # if using R 3.6 or later
+x <- rnorm(n, 0, 1)
+y <- 0.75 * x + rnorm(n, 0, sigma)
+dat <- data.frame(x = x, y = y)
+
+fit <- dat %>% rpart(y ~., data=.)
+
+
+
+```
+
+## Plot decisin tree
+
+```{r}
+plot(fit, margin = 0.1)
+text(fit, cex = 0.75)
+```
+
+### Scatter plot of y versus x along with the predicted values based on the fit
+
+```{r}
+dat %>% 
+	mutate(y_hat = predict(fit)) %>% 
+	ggplot() +
+	geom_point(aes(x, y)) +
+  geom_step(aes(x, y_hat), col=2)
+  
+```
+
+
+# Random Forest
+
+```{r}
+library(randomForest)
+set.seed(1, sample.kind = "Rounding") # if using R 3.6 or later
+fit <-  randomForest(y ~ x, data = dat)
+dat %>% 
+	mutate(y_hat = predict(fit)) %>% 
+	ggplot() +
+	geom_point(aes(x, y)) +
+	geom_step(aes(x, y_hat), col = "red")
+
+plot(fit)
+
+set.seed(1, sample.kind = "Rounding")
+#refit nodesize 50 and max node:25
+re_fit <- randomForest(y ~ x, data = dat, nodesize = 50, maxnodes = 25)
+dat %>% 
+	mutate(y_hat = predict(re_fit)) %>% 
+	ggplot() +
+	geom_point(aes(x, y)) +
+	geom_step(aes(x, y_hat), col = "red")
+
+plot(re_fit)
+
+```
+
+# Parameter tuning
+
+## Classification Tree
+
+```{r}
+library(caret)
+library(rpart)
+
+data("tissue_gene_expression")
+
+y <- tissue_gene_expression$y
+x <- tissue_gene_expression$x
+
+set.seed(1991, sample.kind = "Rounding")
+fit <- train(x,y,method="rpart",tuneGrid=data.frame(cp=seq(0, 0.1, 0.01)))
+
+ggplot(fit, highlight = TRUE)
+
+
+## When no of observations required in each node is: 0
+set.seed(1991, sample.kind = "Rounding")
+fit_zero_ob <- train(x,y,method="rpart",tuneGrid=data.frame(cp=seq(0, 0.1, 0.01)),control=rpart.control(minsplit = 0))
+
+ggplot(fit_zero_ob, highlight = TRUE)
+confusionMatrix(fit_zero_ob)
+
+
+plot(fit_zero_ob$finalModel, margin = 0.1)
+text(fit_zero_ob$finalModel, cex = 0.75)
+
+```
+
+## Randon Forest
+
+```{r}
+set.seed(1991, sample.kind = "Rounding")
+train_rf <- train(x,y,method="rf",tuneGrid=data.frame(mtry=seq(50, 200, 25)), nodesize=1)
+ggplot(train_rf)
+
+?varImp
+
+imp <- varImp(train_rf)
+# tree_terms <- as.character(unique(train_rf$finalModel$frame$var[!(train_rf$finalModel$frame$var == "<leaf>")]))
+# tree_terms
+
+#rank of the importance
+data.frame(term = rownames(imp$importance), 
+	   importance = imp$importance$Overall) %>%
+mutate(rank = rank(-importance)) %>% arrange(desc(importance))
+
+
+```
+
+
+
+
+

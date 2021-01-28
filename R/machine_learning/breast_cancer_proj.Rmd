@@ -1,0 +1,194 @@
+---
+title: "Breast Cancer Prediction"
+author: "Sadia Boksh"
+date: "27/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(digits = 3)
+library(matrixStats)
+library(tidyverse)
+library(caret)
+library(dslabs)
+data(brca)
+
+```
+
+```{r}
+str(brca)
+
+dim(brca$x)
+
+x <- brca$x
+y <-  brca$y
+
+head(x)
+
+head(y)
+
+mean(y == 'M')
+
+which.max(colMeans(x))
+which.min(colSds(x))
+
+x_mean <- sweep(x,2,colMeans(x))
+x_scaled<- sweep(x_mean, 2, colSds(x), FUN = "/")
+
+sd(x_scaled[,1])
+median(x_stds[,1])
+
+d_samples <- dist(x_scaled)
+dist_BtoB <- as.matrix(d_samples)[1, brca$y == "B"]
+mean(dist_BtoB[2:length(dist_BtoB)])
+
+dist_BtoM <- as.matrix(d_samples)[1, brca$y == "M"]
+mean(dist_BtoM)
+
+heatmap( as.matrix(d_samples), labRow = NA,labCol = NA)
+
+h <- hclust(dist(t(x_scaled)))
+plot(h)
+grps <- cutree(h,k=5)
+
+grps[c('smoothness_mean','smoothness_worst','compactness_mean', 'compactness_worst','concavity_mean','concavity_worst')]
+
+
+pca <- prcomp(x_scaled)
+summary(pca)$importance[, 1:10]
+
+data.frame(PC1 = pca$x[,1], PC2 = pca$x[,2],
+label=y) %>%
+
+ggplot(aes(PC1, PC2, fill=label))+
+geom_point(cex=3, pch=21)
+
+
+df <- data.frame(PC1 = pca$x[,1], PC2 = pca$x[,2], PC3=pca$x[,3], PC4=pca$x[,4], PC5=pca$x[,5], PC6=pca$x[,6], PC7=pca$x[,7], PC8=pca$x[,8], PC9=pca$x[,9], PC10=pca$x[,10],
+label=y)  %>% gather(PCS,value, -label)
+
+df %>% ggplot(aes(PCS,value, color=label))+ geom_boxplot()
+
+
+  
+# data.frame(type = brca$y, pca$x[,1:10]) %>%
+#     gather(key = "PC", value = "value", -type) %>%
+#     ggplot(aes(PC, value, fill = type)) +
+#     geom_boxplot()
+
+
+```
+```{r}
+
+# set.seed(1) if using R 3.5 or earlier
+set.seed(1, sample.kind = "Rounding")    # if using R 3.6 or later
+test_index <- createDataPartition(brca$y, times = 1, p = 0.2, list = FALSE)
+test_x <- x_scaled[test_index,]
+test_y <- brca$y[test_index]
+train_x <- x_scaled[-test_index,]
+train_y <- brca$y[-test_index]
+
+mean(train_y=='B')
+mean(test_y=='B')
+
+```
+
+```{r}
+
+predict_kmeans <- function(x, k) {
+    centers <- k$centers    # extract cluster centers
+    # calculate distance to cluster centers
+    distances <- sapply(1:nrow(x), function(i){
+                        apply(centers, 1, function(y) dist(rbind(x[i,], y)))
+                 })
+  max.col(-t(distances))  # select cluster with min distance to center
+}
+
+test_y_f <-  ifelse(test_y == "B", 1, 2)
+set.seed(3, sample.kind = "Rounding")
+
+k <- kmeans(train_x, centers = 2)
+
+cf <- confusionMatrix(factor(predict_kmeans(test_x,k)),factor(test_y_f))
+
+cf$overall["Accuracy"]
+
+
+
+pred_kmeans <-  predict_kmeans(test_x,k)
+sensitivity(factor(pred_kmeans), factor(test_y_f), positive = 1)
+
+
+#logistic
+y <- ifelse(train_y == "B", 1, 0)
+train_glm <- train(train_x, train_y,
+                   method = "glm")
+pred_glm <-  predict(train_glm,  test_x)
+cf_glm <- confusionMatrix(pred_glm,test_y)$overall['Accuracy']
+
+
+train_lda <- train(train_x, train_y,
+                   method = "lda")
+
+pred_lda <- predict(train_lda,  test_x)
+cf_lda<- confusionMatrix(pred_lda,test_y)$overall['Accuracy']
+
+
+train_qda <- train(train_x, train_y,
+                   method = "qda")
+pred_qda <- predict(train_qda,  test_x)
+cf_qda<- confusionMatrix(pred_qda,test_y)$overall['Accuracy']
+```
+
+
+```{r}
+library("gam")
+set.seed(5, sample.kind = "Rounding")
+
+train_loess <- train(train_x, train_y,
+                   method = "gamLoess")
+
+pred_loess <- predict(train_loess,  test_x)
+cf_loess <- confusionMatrix(pred_loess,test_y)$overall['Accuracy']
+```
+
+```{r}
+set.seed(7, sample.kind = "Rounding")
+
+train_knn <- train(train_x, train_y,
+                   method = "knn", tuneGrid=data.frame(k=c(3:21)))
+pred_knn <-  predict(train_knn,  test_x)
+cf_knn <- confusionMatrix(pred_knn,test_y)$overall['Accuracy']
+
+train_knn$bestTune
+train_knn$results
+```
+
+```{r}
+set.seed(9, sample.kind = "Rounding")
+
+train_rf <- train(train_x, train_y,
+                   method = "rf", tuneGrid=data.frame(mtry=c(3, 5, 7, 9)), importance=TRUE)
+pred_rf <- predict(train_rf,  test_x)
+cf_rf<-confusionMatrix(pred_rf,test_y)$overall['Accuracy']
+
+train_rf$bestTune
+varImp(train_rf)
+```
+
+```{r}
+c_preds<- cbind(kmeans = pred_kmeans ,glm = pred_glm, lda =pred_lda, qda = pred_qda, loess = pred_loess, knn = pred_knn, rf = pred_rf)
+
+head(c_preds)
+
+c_preds
+
+ensem <- ifelse(rowMeans(c_preds == 1) > 0.5, 'B', 'M')
+
+mean(ensem == test_y)
+
+c_accuracy<- cbind(kmean=cf$overall['Accuracy'], glm=cf_glm, lda=cf_lda, qda=cf_qda, loess=cf_loess, knn=cf_knn, rf=cf_rf, ensem_acc = mean(ensem == test_y))
+
+c_accuracy[which.max(c_accuracy)]
+```

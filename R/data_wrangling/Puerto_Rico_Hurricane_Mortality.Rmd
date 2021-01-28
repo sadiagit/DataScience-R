@@ -1,0 +1,67 @@
+---
+title: "Puerto Rico Hurricane Mortality"
+author: "Sadia Boksh"
+date: "29/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(pdftools)
+library(stringr)
+library(tidyr)
+```
+
+```{r}
+fn <- system.file("extdata", "RD-Mortality-Report_2015-18-180531.pdf", package="dslabs")
+system("cmd.exe", input = paste("start", fn))
+
+txt <- pdf_text(fn)
+
+x <- str_split(txt[9],"\n")
+class(x)
+length(x)
+
+
+s<- x[[1]]
+s
+str(s)
+length(s)
+s <- str_trim(s)
+
+s[[1]]
+
+header_index <-  str_which(s, "2015")[1]
+tmp <- str_split(s[header_index], "\\s+", simplify = TRUE)
+month <- tmp[1]
+header <- tmp[-1]
+#month <-  str_split(header,"\\s+", simplify = TRUE)[[3]][1]
+
+tail_index <- str_which(s, "Total")
+
+n <- str_count(s, "\\d+")
+sum(n == 1)
+
+
+out <- c(1:header_index, which(n==1),  tail_index:length(s))
+
+length(s[-out])
+s<- s[-out]
+
+s <- str_remove_all(s, "[^\\d\\s]")
+
+s <- str_split_fixed(s, "\\s+", n = 6)[,1:5]
+
+tab = s %>% as_tibble() %>% setNames(c("day", header)) %>% mutate(day=as.numeric(day),month=month)
+tab <- tab %>% gather(year,deaths,-c(day,month)) %>% mutate(deaths=as.numeric(deaths))
+
+tab %>% group_by(year) %>% summarise(avg=mean(deaths))
+t_2017<-  tab %>% filter(day %in% c(1:19) & year==2017)
+mean(t_2017$deaths)
+
+t_2017_20_30<-  tab %>% filter(day %in% c(20:30) & year==2017)
+mean(t_2017_20_30$deaths)
+
+tab %>% filter(year != 2018) %>% ggplot(aes(x=day, y=deaths, color=year)) + geom_point() + geom_vline(xintercept = 20) + geom_hline(yintercept = 100)
+             
+```

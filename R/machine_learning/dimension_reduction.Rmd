@@ -1,0 +1,50 @@
+---
+  title: "Clustering"
+author: "Sadia Boksh"
+date: "15/01/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(matrixStats)
+library(tidyverse)
+library(caret)
+library(dslabs)
+data("tissue_gene_expression")
+```
+
+```{r}
+
+
+dim(tissue_gene_expression$x)
+pca <- prcomp(tissue_gene_expression$x)
+
+
+data.frame(PC1 = pca$x[,1], PC2 = pca$x[,2],label=tissue_gene_expression$y)  %>% ggplot(aes(x=PC1, y=PC2, col=label)) + geom_point()
+
+
+x <- tissue_gene_expression$x
+avg<- rowMeans(x) 
+df <- data.frame(PC1=pca$x[,1],avg=avg, label=tissue_gene_expression$y) 
+
+df %>% summarise(cor = cor(PC1,avg))
+  
+df %>%  ggplot(aes(x=PC1, y=avg, col=label) ) + geom_point() 
+
+# centering
+x <- with(tissue_gene_expression, sweep(x, 1, rowMeans(x)))
+         
+avg<- rowMeans(x) 
+df <- data.frame(PC1=pca$x[,1],avg=avg, label=tissue_gene_expression$y) 
+
+df %>% summarise(cor = cor(PC1,avg))
+  
+df %>%  ggplot(aes(x=PC1, y=avg, col=label) ) + geom_point() 
+  
+summary(pca)
+```
+
+```{r}
+data.frame(type=tissue_gene_expression$y, PC7=pca$x[, 7]) %>% ggplot(aes(x=PC7,fill=type)) + geom_boxplot()
+```

@@ -1,0 +1,99 @@
+---
+title: "distance"
+author: "Sadia Boksh"
+date: "08/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dslabs)
+data(tissue_gene_expression)
+```
+
+```{r}
+dim(tissue_gene_expression$x)
+table(tissue_gene_expression$y)
+d <- dist(tissue_gene_expression$x)
+as.matrix(d)
+x <-  tissue_gene_expression$x
+y <- tissue_gene_expression$y
+#cerebellum
+x_1 <- x[1,]
+x_2 <- x[2,]
+
+sqrt(crossprod(x_1 - x_2))
+
+#colon
+x_39 <- x[39,]
+x_40 <- x[40,]
+
+sqrt(crossprod(x_39 - x_40))
+
+#endometrium
+
+x_73 <- x[73,]
+x_74 <- x[74,]
+
+sqrt(crossprod(x_73 - x_74))
+
+y_1 <- y[c(1,2,39,40,73,74)]
+d<-dist(x[c(1,2,39,40,73,74),])
+as.matrix(d)
+
+image(as.matrix(d)[order(y_1), order(y_1)])
+
+ind <- c(1, 2, 39, 40, 73, 74)
+as.matrix(d)[ind,ind]
+```
+
+# KNN to classify gender from heights
+
+```{r}
+library(caret)
+data("heights")
+
+set.seed(1, sample.kind="Rounding") # if using R 3.6 or later
+test_index <- createDataPartition(heights$sex, times = 1,p = 0.5,list = FALSE)
+test <- heights[test_index,]
+train <- heights[-test_index,]
+
+
+ks <- seq(1, 101, 3)
+
+f1_scores <- sapply(ks, function(k){
+      knn_fit <- knn3(sex ~ height, data = train, k=k)
+      y_hat <- predict(knn_fit, test, type = "class")%>% factor(levels = levels(test$sex))
+      F_meas(data=y_hat, reference=factor(test$sex))
+     
+    })
+ks[which.max(f1_scores)]
+max(f1_scores)
+
+F_values <- data.frame( k = ks, F_1 = f1_scores )
+
+F_values %>% ggplot( aes( x = k, y = F_1 ) ) +
+  geom_point() +
+  geom_smooth()
+```
+
+```{r}
+data("tissue_gene_expression")
+set.seed(1, sample.kind="Rounding") # if using R 3.6 or later
+test_index <- createDataPartition(tissue_gene_expression$y, times = 1,p = 0.5,list = FALSE)
+x_test <- tissue_gene_expression$x[test_index,]
+x_train <- tissue_gene_expression$x[-test_index,]
+y_test <- tissue_gene_expression$y[test_index]
+y_train <- tissue_gene_expression$y[-test_index]
+
+ks <- seq(1, 11, 2)
+
+accuracy <- sapply(ks, function(k){
+      knn_fit <- knn3(x_train, y_train, k=k)
+      y_hat <- predict(knn_fit, x_test, type = "class")%>% factor(levels = levels(y_test))
+      confusionMatrix(y_hat, y_test)$overall["Accuracy"]
+     
+    })
+
+
+```

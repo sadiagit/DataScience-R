@@ -1,0 +1,272 @@
+---
+title: "Titanic"
+author: "Sadia Boksh"
+date: "15/12/2020"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rmarkdown)
+library(titanic)    # loads titanic_train data frame
+library(caret)
+library(tidyverse)
+library(rpart)
+library(dplyr)
+
+# 3 significant digits
+options(digits = 3)
+```
+# Introduction
+
+The Titanic was a British ocean liner that struck an iceberg and sunk on its maiden voyage in 1912 from the United Kingdom to New York. More than 1,500 of the estimated 2,224 passengers and crew died in the accident, making this one of the largest maritime disasters ever outside of war. The ship carried a wide range of passengers of all ages and both genders, from luxury travelers in first-class to immigrants in the lower classes. However, not all passengers were equally likely to survive the accident. We will use real data about a selection of 891 passengers to predict which passengers survived.
+
+# Data
+
+```{r}
+
+
+# clean the data - `titanic_train` is loaded with the titanic package
+titanic_clean <- titanic_train %>%
+    mutate(Survived = factor(Survived),
+           Embarked = factor(Embarked),
+           Age = ifelse(is.na(Age), median(Age, na.rm = TRUE), Age), # NA age to median age
+           FamilySize = SibSp + Parch + 1) %>%    # count family members
+  select(Survived,  Sex, Pclass, Age, Fare, SibSp, Parch, FamilySize, Embarked)
+
+head(titanic_clean)
+
+```
+
+# Training and test sets
+
+Now we will split titanic_clean into test and training sets 
+We will use the caret package to create a 20% data partition based on the Survived column and assign the 20% partition to test_set and the remaining 80% partition to train_set.
+
+```{r message='hide', warning=FALSE}
+set.seed(42, sample.kind = "Rounding")
+ind <- createDataPartition(titanic_clean$Survived, times = 1,p=0.2, list=FALSE)
+train_set <- titanic_clean[-ind,]
+test_set <- titanic_clean[ind,]
+
+nrow(train_set)
+nrow(test_set)
+
+mean(train_set$Survived == 1)
+```
+
+The simplest prediction method is randomly guessing the outcome without using additional predictors. These methods will help us determine whether our machine learning algorithm performs better than chance.
+For each individual in the test set, we will randomly guess whether that person survived or not by sampling from the vector c(0,1).
+
+```{r warning=FALSE}
+set.seed(3, sample.kind = "Rounding")
+guess <- sample(c(0,1), nrow(test_set), replace = TRUE)
+
+# accuracy
+mean(guess == test_set$Survived)
+```
+# Predicting survival by sex
+
+First we will determine whether members of a given sex were more likely to survive or die. Proportion of female and male survived in the training set: 
+
+```{r}
+#female
+train_set %>% filter(Sex == "female") %>% group_by(Survived) %>% summarize(n=n()) %>% mutate(prop = n/sum(n))
+
+#male
+train_set %>% filter(Sex == "male") %>% group_by(Survived) %>% summarize(n=n()) %>% mutate(prop = n/sum(n))
+
+```
+
+Now we will predict survival using sex on the test set: if the survival rate for a sex is over 0.5, predict survival for all individuals of that sex, and predict death if the survival rate for a sex is under 0.5.
+
+```{r}
+
+ts <- test_set %>% group_by(Sex) %>% mutate(survival_rate = mean(Survived == 1))
+y_hat_Sex <- ifelse(ts$survival_rate > 0.5, 1,0)
+
+#accuracy 
+mean(y_hat_Sex == test_set$Survived)
+```
+
+
+# Predicting survival by passenger class
+
+```{r}
+train_set %>% group_by(Pclass) %>% summarize(pclass_s_rate = mean(Survived == 1))
+```
+Class 1 passengers most likelt to survive.
+
+Now we will predict survival if the survival rate for a class is over 0.5, otherwise predict death.
+
+Accuracy shown below:
+
+```{r}
+y_hat_by_pclass <- ifelse(test_set$Pclass == 1, 1,0)
+mean(y_hat_by_pclass == test_set$Survived)
+```
+
+Using the training set to group passengers by both sex and passenger class. It looks like females in 1st and 2nd classes are most likely to survive. 
+
+```{r}
+train_set %>% group_by(Sex, Pclass) %>% summarise(r = mean(Survived == 1))
+```
+
+Now we will predict survival if the survival rate for a sex/class combination is over 0.5, otherwise predict death. Accuracy as below:
+
+```{r}
+y_hat_sex_class <- ifelse((test_set$Sex == "female" & test_set$Pclass %in% c(1,2)), 1,0)
+mean(y_hat_sex_class == test_set$Survived)
+```
+
+# Confusion matrix
+
+## Sex based model
+```{r}
+
+confusionMatrix(factor(y_hat_Sex), test_set$Survived)
+
+```
+
+## Class based model
+
+```{r}
+confusionMatrix(factor(y_hat_by_pclass), test_set$Survived)
+```
+## Sex and Pclass combined model
+
+```{r}
+confusionMatrix(factor(y_hat_sex_class), test_set$Survived)
+```
+## F1 Score (harmonic accuracy)
+
+```{r}
+#Sex based model
+F_meas(factor(y_hat_Sex), test_set$Survived)
+
+#Class based model
+F_meas(factor(y_hat_by_pclass), test_set$Survived)
+
+#Combined model 
+F_meas(factor(y_hat_sex_class), test_set$Survived)
+```
+
+# Survival by fare - LDA and QDA
+
+```{r}
+#LDA
+set.seed(1, sample.kind = "Rounding")
+train_lda <- train_set  %>% train(Survived ~ Fare, method="lda", data=.)
+
+confusionMatrix(predict(train_lda, test_set),test_set$Survived)
+
+
+#QDA
+set.seed(1, sample.kind = "Rounding")
+train_qda <- train_set  %>% train(Survived ~ Fare, method="qda", data=.)
+
+confusionMatrix(predict(train_qda, test_set), test_set$Survived)
+
+
+
+```
+
+# Logistic regression models
+
+## Age as predictor
+```{r}
+set.seed(1, sample.kind = "Rounding")
+train_glm <- train_set %>% train(Survived ~ Age, method="glm", data=.)
+confusionMatrix(predict(train_glm, test_set), test_set$Survived)
+
+```
+
+
+## Sex, class, fare and age predictors
+
+```{r}
+
+set.seed(1, sample.kind = "Rounding")
+train_glm_2 <- train_set %>% train(Survived ~ Sex+Pclass+Fare+Age, method="glm", data=.)
+confusionMatrix(predict(train_glm_2, test_set), test_set$Survived)
+```
+
+## All predictors
+
+```{r warning=FALSE }
+set.seed(1, sample.kind = "Rounding")
+train_glm_all <- train_set %>% train(Survived ~ ., method="glm", data=.)
+confusionMatrix(predict(train_glm_all, test_set), test_set$Survived)
+```
+
+# kNN model
+
+```{r}
+set.seed(6, sample.kind = "Rounding")
+train_knn <- train_set %>% train(Survived ~ ., method="knn", tuneGrid=data.frame(k=seq(3,51,2)), data=.)
+
+#optimal value of k
+train_knn$bestTune
+```
+
+## Plot KNN model
+
+```{r}
+ggplot(train_knn)
+```
+
+## Accuracy
+
+```{r}
+confusionMatrix(predict(train_knn,test_set), test_set$Survived)
+
+```
+## Cross-validation
+
+```{r}
+
+set.seed(8, sample.kind = "Rounding")
+control <-  trainControl(method = "cv", number = 10, p=0.9)
+train_knn_cv <- train_set %>% train(Survived ~ ., method="knn", tuneGrid=data.frame(k=seq(3,51,2)), data=., trControl=control)
+
+train_knn_cv$bestTune
+
+confusionMatrix(predict(train_knn_cv, test_set), test_set$Survived)
+
+```
+#  Classification tree model
+
+```{r}
+
+set.seed(10, sample.kind = "Rounding")
+
+train_cart <- train_set %>% train(Survived ~ ., method="rpart", tuneGrid=data.frame(cp = seq(0, 0.05, 0.002)), data=.)
+
+train_cart$bestTune
+
+confusionMatrix(predict(train_cart, test_set), test_set$Survived)
+
+plot(train_cart$finalModel, margin = 0.1)
+text(train_cart$finalModel, cex = 0.75)
+
+```
+
+
+# Random Forest
+
+```{r}
+
+set.seed(14, sample.kind = "Rounding")
+
+train_rf <- train_set %>% train(Survived ~ ., method="rf", tuneGrid=data.frame(mtry = seq(1:7)), data=., ntree=100)
+
+train_rf$bestTune
+ggplot(train_rf)
+
+confusionMatrix(predict(train_rf, test_set), test_set$Survived)
+
+imp <- varImp(train_rf)
+```
+
+
+

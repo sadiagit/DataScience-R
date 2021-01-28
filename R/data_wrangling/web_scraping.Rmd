@@ -1,0 +1,35 @@
+```{r}
+library(rmarkdown)
+library(tidyverse)
+library(dplyr)
+library(rvest)
+url <- "https://web.archive.org/web/20181024132313/http://www.stevetheump.com/Payrolls.htm"
+h <- read_html(url)
+nodes <- html_nodes(h, "table")
+html_text(nodes[[8]])
+html_table(nodes[[8]])
+
+sapply(nodes[1:4], html_table) 
+
+sapply(tail(nodes,3), html_table)
+
+tab1 <-  html_table(nodes[[10]])
+tab2 <- html_table(nodes[[19]])
+
+tab1 <- tab1 %>% filter(X2 != "Team")  %>%select(X2,X3,X4)
+colnames(tab1) <- c("Team", "Payroll", "Average")
+
+tab2 <-  tab2 %>% filter(X1 != "Team") 
+colnames(tab2) <- c("Team", "Payroll", "Average")
+
+tab3<- tab2 %>% full_join(tab1,by="Team")
+nrow(tab3)
+```
+```{r}
+brexit_url <- "https://en.wikipedia.org/w/index.php?title=Opinion_polling_for_the_United_Kingdom_European_Union_membership_referendum&oldid=896735054"
+h_brexit <- read_html(brexit_url)
+nodes_brexit <- html_nodes(h_brexit, "table")
+length(nodes_brexit)
+
+sapply(nodes_brexit[1:20], html_table, fill=TRUE)
+```

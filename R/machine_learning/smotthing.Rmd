@@ -1,0 +1,157 @@
+---
+title: "Smoothing & Matrices"
+author: "Sadia Boksh"
+date: "28/11/2020"
+output: github_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dslabs)
+library(dplyr)
+library(rmarkdown)
+library(tidyverse)
+library(lubridate)
+library(purrr) #map functions
+library(pdftools)
+```
+
+```{r}
+fn <- system.file("extdata", "RD-Mortality-Report_2015-18-180531.pdf", package="dslabs")
+dat <- map_df(str_split(pdf_text(fn), "\n"), function(s){
+	s <- str_trim(s)
+	header_index <- str_which(s, "2015")[1]
+	tmp <- str_split(s[header_index], "\\s+", simplify = TRUE)
+	month <- tmp[1]
+	header <- tmp[-1]
+	tail_index  <- str_which(s, "Total")
+	n <- str_count(s, "\\d+")
+	out <- c(1:header_index, which(n==1), which(n>=28), tail_index:length(s))
+	s[-out] %>%
+		str_remove_all("[^\\d\\s]") %>%
+		str_trim() %>%
+		str_split_fixed("\\s+", n = 6) %>%
+		.[,1:5] %>%
+		as_tibble() %>% 
+		setNames(c("day", header)) %>%
+		mutate(month = month,
+			day = as.numeric(day)) %>%
+		gather(year, deaths, -c(day, month)) %>%
+		mutate(deaths = as.numeric(deaths))
+}) %>%
+	mutate(month = recode(month, "JAN" = 1, "FEB" = 2, "MAR" = 3, "APR" = 4, "MAY" = 5, "JUN" = 6, 
+                          "JUL" = 7, "AGO" = 8, "SEP" = 9, "OCT" = 10, "NOV" = 11, "DEC" = 12)) %>%
+	mutate(date = make_date(year, month, day)) %>%
+        dplyr::filter(date <= "2018-05-01")
+
+head(dat)
+
+dat = na.omit(dat)
+any(is.na(dat))
+
+str(dat)
+
+```
+
+Lets Use the loess() function to obtain a smooth estimate of the expected number of deaths as a function of date. 
+
+```{r}
+span = 60/nrow(dat)
+fit <- loess(deaths ~ as.numeric(date), degree=1, span = span, data=dat)
+```
+
+We will plot this resulting smooth function using the span about two months long.
+```{r}
+dat %>% 
+    mutate(smooth = fit$fitted, year = as.character(year(date))) %>%
+    ggplot(aes(date, deaths)) +
+    geom_point(size=3, alpha=0.5, color="grey")+
+    geom_line(aes(date,smooth),lty=1, color="red", size=1)
+```
+
+
+Now we will plot smooth estimates against day of the year, all on the same plot, but with different colors for each year.
+
+```{r}
+
+?predict
+  dat %>% 
+    mutate(smooth = predict(fit), day = yday(date), year = as.character(year(date))) %>%
+    ggplot(aes(day, smooth, col = year)) +
+    geom_line(lwd = 2)
+    dat %>% 
+    mutate(smooth = predict(fit, as.numeric(date)), day = yday(date), year = as.character(year(date))) %>%
+    ggplot(aes(day, smooth, col = year)) +
+    geom_line(lwd = 2)
+```
+Suppose we want to predict 2s and 7s in the mnist_27 dataset with just the second covariate. Can we do this? On first inspection it appears the data does not have much predictive power.
+
+In fact, if we fit a regular logistic regression the coefficient for x_2 is not significant!
+
+This can be seen using this code:
+
+```{r}
+library(broom)
+mnist_27$train %>% glm(y ~ x_2, family = "binomial", data = .) %>% tidy()
+
+qplot(x_2, y, data = mnist_27$train)
+
+head(as.numeric(mnist_27$train$y==7))
+```
+
+But by fitting a loess line to the data above and plotting the results, we can see there is predictive power and the conditional probability is non-linear.
+
+u shaped curve means the line close to 1 has higher conditional probability of being 7 and x2 between .27 and .34 has higher conditional probability of getting 2
+
+```{r}
+
+
+fit <- loess(as.numeric(y==7) ~ x_2,degree=2,data=mnist_27$train)
+
+mnist_27$train %>% 
+    mutate(smooth = fit$fitted) %>%
+    ggplot(aes(x_2, as.numeric(y==7))) +
+    geom_point(size=3, alpha=0.5, color="grey")+
+    geom_line(aes(x_2,smooth),lty=1, color="red", size=1)
+
+
+```
+# Matrices
+
+```{r}
+?matrix
+
+      x <- matrix(rnorm(100*10), 100, 10)
+      dim(x)
+      nrow(x)
+      ncol(x)
+      head(x)
+      ?sweep
+      
+      x <- x + seq(nrow(x))
+      head(x)
+      
+      x <- -x
+          x <- 1:ncol(x)
+          rowMeans(x)
+```
+
+```{r}
+class(mnist$train$images)
+x <- mnist$train$images 
+y <- mnist$train$labels
+head(y)
+class(x)
+head(x,1)
+new_x<- x[x>50 & x<205]
+dim(x)
+mean(rowMeans(x>50 & x<205))
+
+rowSums(x>50 & x<205)/784/
+
+y <- rowMeans(mnist$train$images>50 & mnist$train$images<205)
+qplot(as.factor(mnist$train$labels), y, geom = "boxplot")
+
+#boxplot(y,new_x)
+```

@@ -1,0 +1,395 @@
+---
+title: "Predicting Cicada Body Length using Bayesian Data Analysis"
+author: "Sadia Boksh"
+date: "13/11/2020"
+output:
+  github_document:
+    html_preview: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library("rmarkdown")
+library("rjags")
+library("dplyr")
+library("ggplot2")
+library(grid)
+
+```
+
+# Data
+Lets explore cicada data.
+
+```{r Explore Data, echo=FALSE}
+cicada_df = read.table(file="Cicada.txt", header=TRUE)
+```
+```{r}
+head(cicada_df)
+```
+
+Structure of the data:    
+```{r}
+str(cicada_df)
+```
+### Plots
+```{r Plots}
+
+par(mfrow=c(2,2))
+plot(BL ~ BW, data=cicada_df)
+plot(BL ~ WW, data=cicada_df)
+plot(BL ~ WL, data=cicada_df)
+
+```
+```{r }
+cicada_df %>% ggplot(aes(x=G,y=BL,group=G))+
+              geom_boxplot()+
+              facet_grid(. ~ Species)
+```
+
+Now lets check if there are any missing values.
+```{r}
+any(is.na(cicada_df))
+
+cicada_df$Species = cicada_df$Species+1
+cicada_df$gender = cicada_df$G+1
+
+data_jags = as.list(cicada_df)
+```
+Looks like none. Lets change the Species column values to start from 1 and create a new columns gender that will start from 1.
+
+# Models
+
+## Model 1
+First start off with a simple linear model with all features as predictors and check its DIC.
+```{r}
+simple_string = " model {
+    for (i in 1:length(BL)) {
+        BL[i] ~ dnorm(mu[i], prec)
+        mu[i] = int+
+                  b[1]*BW[i] +
+                  b[2]*WL[i]+
+                  b[3]*WW[i]+
+                  b[4]*gender[i]+
+                  b[5] *Species[i] 
+                  
+
+    }
+    int ~ dnorm(0.0, 1.0/1.0e4)
+    
+    for (j in 1:5) {
+        b[j] ~ dnorm(0.0, 1/1e4) # has variance 1.0
+    }
+
+    prec ~ dgamma(1/2.0, 1*2/2.0)
+    sig = sqrt(1 / prec)
+} "
+
+
+set.seed(92)
+
+params = c("int", "b", "sig")
+
+simple_mod = init_model(simple_string, data_jags,3)
+
+sim_dic = dic.samples(simple_mod, n.iter = 1e3)
+sim_dic
+
+```
+## Model 2
+
+Second model is a hierarchical model  with random intercepts i.e each species has its own intercepts
+```{r}
+h_modx_string = " model {
+    for (i in 1:length(BL)) {
+        BL[i] ~ dnorm(mu[i], prec)
+        mu[i] = a[Species[i]] +
+                  b[1]*BW[i] +
+                  b[2]*WL[i]+
+                  b[3]*G[i] +
+                  b_intx * WL[i] * G[i]
+
+
+    }
+    for (i in 1:max(Species)) {
+       a[i] ~ dnorm(a0, prec_a)
+    }
+
+    a0 ~ dnorm(0.0, 1.0/1.0e4)
+    prec_a ~ dgamma(1/2.0, 1*2.0/2.0)
+    tau = sqrt( 1.0 / prec_a )
+
+    b_intx ~ dnorm(0.0, 1/1e4)
+    for (j in 1:3) {
+        b[j] ~ dnorm(0.0, 1/1e4)
+    }
+
+    prec ~ dgamma(1/2.0, 1*2/2.0)
+    sig = sqrt(1 / prec)
+} "
+
+
+set.seed(92)
+
+params = c("a0","a", "b","b_intx", "sig", "tau")
+
+h_modx = init_model(h_modx_string, data_jags,3)
+hx_dic = dic.samples(h_modx, n.iter = 1e3)
+hx_dic
+
+```
+## COnvergence Diagnostics
+DIC is better for this model, lets check how well it can predict the cicada body lengths. Fist we need to simulate the model and check trace plots and convergence diagnostics.
+
+### Trace Plots
+```{r}
+h_x1_sim = simulate_model(h_modx,params,5e5)
+h_x1_csim =  combine_simu(h_x1_sim)
+plot(h_x1_sim)
+```
+### Autocorrelation check
+Now check the gelmen rubin diagnostics for convergence
+```{r}
+  gelman.diag(h_x1_sim)
+  autocorr.plot(h_x1_sim, lag.max=1000)
+  effectiveSize(h_x1_csim)
+```
+```{r}
+
+
+pm_coef_so = colMeans(h_x1_csim)# posterior mean
+
+
+X = cbind(data_jags$BW,data_jags$WL,data_jags$G,data_jags$WL*data_jags$G, data_jags$Species)
+head(X)
+
+X1=X[X[, 5] == 1,]
+X2=X[X[, 5] == 2,]
+X3=X[X[, 5]== 3,]
+
+yhat1 = drop(pm_coef["a[1]"]+ X1[,c(1:4)] %*% pm_coef_so[c(5:8)])
+resid1 = cicada_df$BL[which(cicada_df$Species == 1)] - yhat1
+plot(resid1,xlab="index", ylab="resid1", main="Residual check for species 1 (tredecula)") # against data index
+plot(yhat1, resid1,xlab="yhat1", ylab="resid1", main="Residuals vs preditions for species 1 (tredecula)")
+
+head(yhat1)
+head(cicada_df$BL[which(cicada_df$Species == 1)] )
+qqnorm(resid1)
+
+yhat2 = drop(pm_coef["a[2]"]+ X2[,c(1:4)] %*% pm_coef_so[c(5:8)])
+resid2 = cicada_df$BL[which(cicada_df$Species == 2)] - yhat2
+plot(resid2) # against data index
+plot(yhat2, resid2)
+qqnorm(resid2)
+
+yhat3 = drop(pm_coef["a[3]"]+ X3[,c(1:4)] %*% pm_coef_so[c(5:8)])
+resid3 = cicada_df$BL[which(cicada_df$Species == 3)] - yhat3
+plot(resid3) # against data index
+plot(yhat3, resid3)
+qqnorm(resid3)
+
+
+
+
+cicada_m = c(.20,24,1,24)
+cicada_f = c(.20,24,0,0)
+(n_sim = nrow(h_x1_csim))
+
+head(h_mod_csim[,c(5:8)])
+mu_pred_m1_so =  h_x1_csim[,"a[1]"] + h_x1_csim[,c(5:8)] %*% cicada_m
+y_pred_m1_so =  rnorm(n=n_sim, mu_pred_m1_so, h_x1_csim[, "sig"])
+
+mu_pred_f1_so =  h_x1_csim[,"a[1]"] + h_x1_csim[,c(5:8)] %*% cicada_f
+y_pred_f1_so =  rnorm(n=n_sim, mu_pred_f1_so, h_x1_csim[, "sig"])
+
+mu_pred_m2_so =  h_x1_csim[,"a[2]"] + h_x1_csim[,c(5:8)] %*% cicada_m
+y_pred_m2_so =  rnorm(n=n_sim, mu_pred_m2_so, h_x1_csim[, "sig"])
+
+mu_pred_f2_so =  h_x1_csim[,"a[2]"] + h_x1_csim[,c(5:8)] %*% cicada_f
+y_pred_f2_so =  rnorm(n=n_sim, mu_pred_f2_so, h_x1_csim[, "sig"])
+
+mu_pred_m3_so =  h_x1_csim[,"a[3]"] + h_x1_csim[,c(5:8)] %*% cicada_m
+y_pred_m3_so =  rnorm(n=n_sim, mu_pred_m3_so, h_x1_csim[, "sig"])
+
+mu_pred_f3_so =  h_x1_csim[,"a[3]"] + h_x1_csim[,c(5:8)] %*% cicada_f
+y_pred_f3_so =  rnorm(n=n_sim, mu_pred_f3_so, h_x1_csim[, "sig"])
+
+mean(y_pred_m3 > y_pred_f3)
+
+par(mfrow=c(3,1))
+plot(density(y_pred_m1_so),xlab="BL", ylab="density", main="Posterior distribution of BL (Species 1 (tredecula)) ", lty=2, xlim=c(10,35))
+lines(density(y_pred_f1_so), col="black", lty=1)
+legend("topleft", legend=c("tredecula M","tredecula F"),
+       lty=c(2,1), col=rep(c("black"), each=2), bty="n")
+plot(density(y_pred_m2_so), col="red" ,lty = 2,xlim=c(10,35), main="Posterior distribution of BL (Species 1 (tredecassini))")
+lines(density(y_pred_f2_so), col="red" ,lty=1)
+legend("topleft", legend=c("tredecassini M","tredecassini F"),
+       lty=c(2,1), col=rep(c("red"), each=2), bty="n")
+plot(density(y_pred_m3_so), col="blue", lty=2,xlim=c(10,35), main="Posterior distribution of BL (Species 1 (tredecim))")
+lines(density(y_pred_f3_so), col="blue", lty=1)
+legend("topleft", legend=c("tredecim M","tredecim F"),
+       lty=c(2,1), col=rep(c("blue"), each=2), bty="n")
+```
+
+
+## MOdel 3
+
+Third model is also a hierarchical model, but its intercept will depend on both species and gender. 
+```{r}
+h_mod_string = " model {
+    for (i in 1:length(BL)) {
+        BL[i] ~ dnorm(mu[i], prec)
+        mu[i] = a[Species[i],gender[i]] +
+                  b[1]*BW[i] +
+                  b[2]*WL[i]+
+                  b_intx*WL[i]*gender[i]
+                  
+
+    }
+    for (i in 1:max(Species)) {
+      for(j in 1:max(gender)){
+       a[i,j] ~ dnorm(a0, prec_a)
+      }
+    }
+
+    a0 ~ dnorm(0.0, 1.0/1.0e4)
+    prec_a ~ dgamma(1/2.0, 1*2.0/2.0)
+    tau = sqrt( 1.0 / prec_a )
+
+    b_intx ~ dnorm(0.0, 1/1e4)
+    b_intx_a ~ dnorm(0.0, 1/1e4)
+    for (j in 1:2) {
+        b[j] ~ dnorm(0.0, 1/1e4)
+    }
+
+    prec ~ dgamma(1/2.0, 1*2/2.0)
+    sig = sqrt(1 / prec)
+} "
+
+
+set.seed(92)
+
+params = c("a0","a", "b","b_intx", "sig", "tau")
+
+h_mod = init_model(h_mod_string, data_jags,3)
+
+h_dic =  dic.samples(h_mod, n.iter=1e3)
+h_dic
+
+
+```
+
+
+
+```{r}
+h_mod_sim = simulate_model(h_mod,params,1e5)
+h_mod_csim =  combine_simu(h_mod_sim)
+pm_coef = colMeans(h_mod_csim)# posterior mean
+
+
+X = cbind(data_jags$BW,data_jags$WL,data_jags$gender,data_jags$WL*data_jags$gender, data_jags$Species)
+head(X)
+
+X1_f=X[X[, 5] == 1 & X[, 3] == 1,]
+X1_m=X[X[, 5] == 1 & X[, 3] == 2,]
+X2_f=X[X[, 5] == 2 & X[, 3] == 1,]
+X2_m=X[X[, 5] == 2 & X[, 3] == 2,]
+X3_f=X[X[, 5]== 3 & X[, 3] == 1,]
+X3_m=X[X[, 5]== 3 & X[, 3] == 2,]
+
+beta_coeffs =  pm_coef[c(8:10)]
+
+species_1_female = X1_f[,c(1:2,4)] %*% beta_coeffs
+species_1_male = X1_m[,c(1:2,4)] %*% beta_coeffs
+
+yhat1_f = drop(pm_coef["a[1,1]"]+species_1_female)
+resid1_f = cicada_df$BL[which(cicada_df$Species == 1 & cicada_df$gender == 1)] - yhat1_f
+plot(resid1_f,xlab="index", ylab="resid1", main="Residual check for species 1 (tredecula)") # against data index
+plot(yhat1_f, resid1_f,xlab="yhat1", ylab="resid1", main="Residuals vs preditions for species 1 (tredecula)")
+qqnorm(resid1_f)
+
+yhat1_m = drop(pm_coef["a[1,2]"]+species_1_male)
+resid1_m = cicada_df$BL[which(cicada_df$Species == 1 & cicada_df$gender == 2)] - yhat1_m
+plot(resid1_m,xlab="index", ylab="resid1", main="Residual check for species 1 (tredecula)") # against data index
+plot(yhat1_m, resid1_m,xlab="yhat1", ylab="resid1", main="Residuals vs preditions for species 1 (tredecula)")
+qqnorm(resid1_m)
+
+
+cicada_m = c(.20,24,24)
+cicada_f = c(.20,24,0)
+(n_sim = nrow(h_mod_csim))
+
+head(h_mod_csim[,c(5:7)])
+mu_pred_m1 =  h_mod_csim[,"a[1,2]"] + h_mod_csim[,c(8:10)] %*% cicada_m
+y_pred_m1 =  rnorm(n=n_sim, mu_pred_m1, h_mod_csim[, "sig"])
+
+mu_pred_f1 =  h_mod_csim[,"a[1,1]"] + h_mod_csim[,c(8:10)] %*% cicada_f
+y_pred_f1 =  rnorm(n=n_sim, mu_pred_f1, h_mod_csim[, "sig"])
+
+mu_pred_m2 =  h_mod_csim[,"a[2,2]"] + h_mod_csim[,c(8:10)] %*% cicada_m
+y_pred_m2 =  rnorm(n=n_sim, mu_pred_m2, h_mod_csim[, "sig"])
+
+mu_pred_f2 =  h_mod_csim[,"a[2,1]"] + h_mod_csim[,c(8:10)] %*% cicada_f
+y_pred_f2 =  rnorm(n=n_sim, mu_pred_f2, h_mod_csim[, "sig"])
+
+mu_pred_m3 =  h_mod_csim[,"a[3,2]"] + h_mod_csim[,c(8:10)] %*% cicada_m
+y_pred_m3 =  rnorm(n=n_sim, mu_pred_m3, h_mod_csim[, "sig"])
+
+mu_pred_f3 =  h_mod_csim[,"a[3,1]"] + h_mod_csim[,c(8:10)] %*% cicada_f
+y_pred_f3 =  rnorm(n=n_sim, mu_pred_f3, h_mod_csim[, "sig"])
+
+mean(y_pred_m1 > y_pred_f1)
+
+
+par(mfrow=c(3,1))
+plot(density(y_pred_m1),xlab="BL", ylab="density", main="Posterior distribution of BL (Species 1 (tredecula)) ", lty=2, xlim=c(10,35))
+lines(density(y_pred_f1), col="black", lty=1)
+legend("topleft", legend=c("tredecula M","tredecula F"),
+       lty=c(2,1), col=rep(c("black"), each=2), bty="n")
+plot(density(y_pred_m2), col="red" ,lty = 2,xlim=c(10,35), main="Posterior distribution of BL (Species 1 (tredecassini))")
+lines(density(y_pred_f2), col="red" ,lty=1)
+legend("topleft", legend=c("tredecassini M","tredecassini F"),
+       lty=c(2,1), col=rep(c("red"), each=2), bty="n")
+plot(density(y_pred_m3), col="blue", lty=2,xlim=c(10,35), main="Posterior distribution of BL (Species 1 (tredecim))")
+lines(density(y_pred_f3), col="blue", lty=1)
+legend("topleft", legend=c("tredecim). M","tredecim). F"),
+       lty=c(2,1), col=rep(c("blue"), each=2), bty="n")
+
+
+```
+
+
+
+
+
+
+
+## Helper Fucntions
+```{r helper functions}
+init_model = function(mod_string, data_jags, n_chains){
+  mod = jags.model(textConnection(mod_string), data=data_jags, n.chains=n_chains)
+  update(mod, 1e3) #burn in
+  mod
+}
+
+simulate_model =  function(mod, params, n_iter){
+  coda.samples(model=mod,variable.names=params,n.iter=n_iter)
+
+}
+combine_simu = function(mod_sim){
+  as.mcmc(do.call(rbind, mod_sim))
+}
+
+diagnose_covergence = function(mod_sim){
+  plot(h_mod2_sim[, c("a[1,1]","a[1,2]")])
+    plot(var_sim)
+
+  gelman.diag(h_mod2_sim)
+  autocorr.diag(h_mod2_sim)
+  autocorr.plot(h_modx2_sim)
+  effectiveSize(h_modx2_csim)
+}
+
+```

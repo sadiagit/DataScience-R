@@ -1,0 +1,40 @@
+```{r}
+library(Lahman)
+library(rmarkdown)
+library(tidyverse)
+library(dplyr)
+
+
+```
+```{r}
+data("Batting")
+top <- Batting %>% 
+  filter(yearID == 2016) %>%
+  arrange(desc(HR)) %>%    # arrange by descending HR count
+  slice(1:10)    # take entries 1-10
+top %>% as_tibble()
+
+Master %>% as_tibble()
+
+top_names <- top %>% left_join(Master) %>%
+    select(playerID, nameFirst, nameLast, HR)
+```
+```{r}
+data("Salaries")
+
+top_salary <- Salaries %>% filter(yearID == 2016) %>% right_join(top_names) %>%
+  select(nameFirst, nameLast, teamID, HR, salary)
+
+```
+```{r}
+data("AwardsPlayers")
+head(AwardsPlayers)
+
+top_10_award_winners<- AwardsPlayers %>% filter(yearID == 2016) %>% inner_join(top_names) %>%select (playerID, awardID) %>% group_by(playerID)  %>% summarise(n=n())
+nrow(top_10_award_winners)
+
+not_top_10_award_winners<- AwardsPlayers %>% filter(yearID == 2016) %>% anti_join(top_names) %>%select (playerID, awardID) %>% group_by(playerID)  %>% summarise(n=n())
+nrow(not_top_10_award_winners)
+?anti_join
+```
+

@@ -7,8 +7,22 @@ output: github_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r include=FALSE}
 library(dslabs)
+library(rmarkdown)
 data(admissions)
+
+```
+
+#Tidy Data
+```{r}
 dat <- admissions %>% select(-applicants)
+dat_tidy <- spread(dat, gender, admitted)
+
+```
+
+```{r}
+tmp <- gather(admissions, key, value, admitted:applicants)
+
+tmp2 <- unite(tmp, column_name, c(key, gender))
 ```
