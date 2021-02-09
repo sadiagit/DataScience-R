@@ -2,7 +2,9 @@
 title: "distance"
 author: "Sadia Boksh"
 date: "08/12/2020"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -15,7 +17,7 @@ data(tissue_gene_expression)
 dim(tissue_gene_expression$x)
 table(tissue_gene_expression$y)
 d <- dist(tissue_gene_expression$x)
-as.matrix(d)
+#as.matrix(d)
 x <-  tissue_gene_expression$x
 y <- tissue_gene_expression$y
 #cerebellum
@@ -44,13 +46,14 @@ as.matrix(d)
 image(as.matrix(d)[order(y_1), order(y_1)])
 
 ind <- c(1, 2, 39, 40, 73, 74)
-as.matrix(d)[ind,ind]
+#as.matrix(d)[ind,ind]
 ```
 
 # KNN to classify gender from heights
 
 ```{r}
 library(caret)
+library(dplyr)
 data("heights")
 
 set.seed(1, sample.kind="Rounding") # if using R 3.6 or later

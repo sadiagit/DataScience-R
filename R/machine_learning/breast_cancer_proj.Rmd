@@ -2,7 +2,9 @@
 title: "Breast Cancer Prediction"
 author: "Sadia Boksh"
 date: "27/12/2020"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -37,7 +39,7 @@ x_mean <- sweep(x,2,colMeans(x))
 x_scaled<- sweep(x_mean, 2, colSds(x), FUN = "/")
 
 sd(x_scaled[,1])
-median(x_stds[,1])
+#median(x_stds[,1])
 
 d_samples <- dist(x_scaled)
 dist_BtoB <- as.matrix(d_samples)[1, brca$y == "B"]
