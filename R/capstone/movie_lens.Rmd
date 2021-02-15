@@ -1,5 +1,5 @@
 ---
-title: "Prediction of Movie Rating"
+title: "Movie Recommendation System"
 author: "Sadia Boksh"
 date: "29/01/2021"
 output: pdf_document
@@ -11,15 +11,13 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Introduction
 
-For this project, I will be creating a movie recommendation system using the MovieLens dataset.Here I will train a machine learning model using the inputs in one subset to predict movie ratings in the validation set.
+For this project, I will be creating a movie recommendation system using the 10M verson of the MovieLens data set. Here I will train a machine learning model using the inputs in one subset to predict movie ratings in the validation set.
 
-Here I will fit a few linear models and calculate their RMSEs to check how good they fit. My first model would be a simple model that uses the movie average to predict. Eventually, I will build my algorithm to include movie effects, user effects and genre effects. Finally, I will use regularization to add penalty term to shrink the effect of smaller sample sizes towards 0.
+Multiple models to be fit for this purpose and their RMSEs will be calculated. I will start with a simple model that uses the movie average for prediction. Eventually, I will modify the model to include movie effects, user effects and genre effects. In addition, I will use regularization to add penalty terms to shrink the effect of smaller sample sizes towards 0. The model that produces the least RMSE will be used on the validation data set to calculate the final RMSE.
 
 # Analysis
 
-First I split the Movielens data set to 10% validation and 90% train set.
-
-Number of rows and col in the train set:
+First I will do some basic data exploration. The MovieLens data set will be initially split into 10% validation set for calculating final RMSE and 90% training set to train and test my models and will be called edx set. 
 
 
 ```{r include=FALSE}
@@ -42,14 +40,14 @@ library(stringr)
 library(matrixStats)
 library(tidyr)
 
-
 # MovieLens 10M dataset:
 # https://grouplens.org/datasets/movielens/10m/
 # http://files.grouplens.org/datasets/movielens/ml-10m.zip
 
-dl <- tempfile()
 
 #if(!file.exists("ml-10M100K")){
+  dl <- tempfile()
+
   download.file("http://files.grouplens.org/datasets/movielens/ml-10m.zip", dl)
 #}
 
@@ -86,12 +84,22 @@ rm(dl, ratings, movies, test_index, temp, movielens, removed)
 
 ```
 
+Number of rows and cols in the edx set:
 
 ```{r echo=FALSE}
 
-#number of rows and cols
+#number of rows and cols in edx
 nrow(edx)
 ncol(edx)
+```
+
+Number of rows and cols in the validation set:
+
+```{r echo=FALSE}
+
+#number of rows and cols in edx
+nrow(validation)
+ncol(validation)
 ```
 
 Number of zeros as ratings:
@@ -120,27 +128,36 @@ Number of different user:
 length(unique(edx$userId))
 ```
 
-Number movie ratings in Drama, Comedy, Thriller, ROmance in edx dataset:
+Number movie ratings in Drama, Comedy, Thriller, Romance in edx dataset:
 
 ```{r echo=FALSE,warning=FALSE,message=FALSE}
+#filter by drama
 drama <- edx %>% filter(str_detect(genres, pattern = "Drama")) 
 
+#filter by comedy
 comedy <- edx %>% filter(str_detect(genres, pattern = "Comedy")) 
 
+#filter by thriller
 thriller <- edx %>% filter(str_detect(genres, pattern = "Thriller")) 
 
+#filter by romance
 romance <- edx %>% filter(str_detect(genres, pattern = "Romance")) 
 
+#create a data frame to show number of ratings in each genre filtered above
 data.frame("Genre" = c("Drama", "Comedy", "Thriller", "Romance"), "n" = c(nrow(drama),nrow(comedy),nrow(thriller),nrow(romance)))
 ```
+
 Highest rated movies:
 
-```{r echo=FALSE, warning=FALSE}
-edx %>% group_by(movieId) %>% summarise(n=n(), title= title[1]) %>% arrange(desc(n))
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+#group by movieId to summarize highest rated movie
+edx %>% group_by(movieId) %>% summarise(n=n(), title= title[1]) %>% arrange(desc(n)) 
 ```
+
 Greatest number of ratings:
 
 ``` {r echo=FALSE,warning=FALSE,message=FALSE}
+#group by rating to summarize which rating are rated more
 edx %>% group_by(rating) %>% summarise(n=n()) %>% arrange(desc(n)) %>%ggplot(aes(x = rating, y = n)) +
 	geom_line()
 
@@ -150,30 +167,73 @@ From the plot above we can say that the half star ratings are less common than f
 
 ## Model Fitting
 
+In order to train and test my model, I will further split up the edx dataset into 20% test set and 80% train set.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+
+set.seed(755, sample.kind="Rounding") 
+test_indx <- createDataPartition(y = edx$rating, times = 1, p = 0.2, list = FALSE)
+train_set <- edx[-test_indx,]
+temp_test_set <- edx[test_indx,]
+
+
+# ensure userId and movieId in test set are also in train set
+test_set <- temp_test_set %>% 
+  semi_join(train_set, by = "movieId") %>%
+  semi_join(train_set, by = "userId")
+
+removed_test <- anti_join(temp_test_set, test_set)
+
+# add back the removed rows from temp to train set
+train_set <- rbind(train_set, removed_test)
+
+```
+
+
+Number of rows in test and train set respectively:
+```{r  echo=FALSE, warning=FALSE, message=FALSE}
+nrow(test_set)
+
+nrow(train_set)
+```
+
 ### First Model
 
-For the first model, we will use just the average of all movies for prediction. RMSE for this simple model:
+For the first model, we will use just the average of all movies for prediction. RMSE for this simple model in the test set:
 
 ```{r  echo=FALSE,warning=FALSE,message=FALSE}
-mu_hat <- mean(edx$rating)
-just_avg <- RMSE(mu_hat, validation$rating)
+#using movie avg to predict rating
+mu_hat <- mean(train_set$rating)
+just_avg <- RMSE(mu_hat, test_set$rating)
 just_avg
 ```
 
 ### Movie Effect
 
-Next I will cater for the movie effect and RMSE for this model:
+Next I will cater for the movie effect. For movie effect my model is:
+
+$Y_{u,i}$ = $\mu$ + $b_{i}$ + $epsilon _{i}$
+
+and RMSE for this model:
 
 ```{r echo=FALSE,warning=FALSE,message=FALSE}
-movie_avgs <- edx %>% group_by(movieId) %>% summarise(b_i =  mean(rating - mu_hat))
 
-bi <-  validation %>% left_join(movie_avgs,by='movieId') %>% .$b_i
+mu <-  mean(train_set$rating)
 
-pred_with_movie_effect <-  mu_hat + bi
+#group by movieId to find movie effect
+movie_avgs <- train_set %>%
+              group_by(movieId) %>% 
+              summarise(b_i =  mean(rating - mu))
+
+#on the test set, calculate rating using movie effect
+pred_with_movie_effect <-  test_set %>% 
+                            left_join(movie_avgs,by='movieId') %>%
+                            mutate(pred = mu + b_i)%>%
+                            pull(pred)
+
 
 #RMSE when bias
-
-movie_effect <- RMSE(pred_with_movie_effect, validation$rating)
+movie_effect <- RMSE(pred_with_movie_effect, test_set$rating)
 movie_effect
 
 ```
@@ -186,114 +246,228 @@ movie_avgs %>% ggplot(aes(b_i))+geom_histogram(bins=10, color=I("black"))
 
 ### User Effect
 
-I will also add the user effect to my algorithm and RMSE for this model:
+I will also add the user effect to my model. For user effect my model is:
+
+$Y_{u,i}$ = $\mu$ + $b_{i}$ + $b_{u}$ + $epsilon _{i}$
+
+
+RMSE for this model:
 
 ```{r echo=FALSE,warning=FALSE,message=FALSE}
-user_avgs <- edx %>% left_join(movie_avgs, by='movieId') %>% group_by(userId) %>% summarise(b_u =  mean(rating - mu_hat -b_i))
+mu <-  mean(train_set$rating)
 
-bu <-  validation %>%
+#group by user id and calculate user effect b_u
+
+user_avgs <- train_set %>% left_join(movie_avgs, by='movieId') %>% group_by(userId) %>% summarise(b_u =  mean(rating - mu -b_i))
+
+#on the test set, calculate rating using user effect
+pred_with_user_effect <-  test_set %>%
           left_join(movie_avgs,by='movieId') %>%
-          left_join(user_avgs,by='userId') %>% .$b_u
+          left_join(user_avgs,by='userId') %>% 
+          mutate(pred = mu + b_i + b_u) %>% pull(pred)
 
-pred_with_user_effect <-  mu_hat + bi + bu
 
 #RMSE when bias
-
-user_effect <-RMSE(pred_with_user_effect, validation$rating)
+user_effect <-RMSE(pred_with_user_effect, test_set$rating)
 user_effect
 ```
 
 We can also check visually how user to user variability looks like:
 
-```{r echo=FALSE,warning=FALSE}
+```{r echo=FALSE,warning=FALSE, message=FALSE}
 
-user_avgs %>% ggplot(aes(b_u))+geom_histogram(bins=10, color=I("black"))
+user_avgs %>% ggplot(aes(b_u))+geom_histogram(color=I("black"))
 ```
 
 ### Genre Effect
 
-Next I would like to see how genres take part in movie rating. For genre effect my model is:
+Next I would like to see how genres take part in movie rating. We can visualize genre to genre variability in rating:
+
+```{r echo=FALSE,warning=FALSE, message=FALSE}
+ 
+train_set %>% group_by(genres) %>%
+              summarize(n_of_ratings =  n()) %>%
+              filter(n_of_ratings > 50000) %>%
+              left_join(train_set , by="genres") %>%
+              group_by(genres) %>%
+              summarise(n = n(),avg_rating = mean(rating), se=sd(rating)/sqrt(n)) %>% 
+              ggplot(aes(x = genres, y = avg_rating)) +
+              geom_errorbar(aes(ymin = avg_rating-2*se, ymax = avg_rating+2*se))+theme(axis.text  = element_text(angle = 90))
+
+```
+
+As from the plot above we can see, a movie can belong to one or more genres, we need to add up all the genre effects that the movie belongs to . For the genres effect my model is:
 
 $Y_{u,i}$ = $\mu$ + $b_{i}$ + $b_{u}$ + $\sum_{k=1}^{K} X_{u,i}b_{k}$ with $x_{u,i}^k$ = 1 if $g_{u,i}$ is genre k.
 
 RMSE for this model:
 
 ```{r echo=FALSE,warning=FALSE,message=FALSE}
+mu <-  mean(train_set$rating)
+#ensure genres in test set are also in train set
+test_genres <- semi_join(test_set,train_set, by="genres")
 
-edx_genres <- edx %>% separate_rows(genres)
-validation_genres <- validation %>% separate_rows(genres)
-genre_avgs <- edx_genres %>% 
+# group by genres to calculate genres effect
+genre_avgs <- train_set %>% 
                          left_join(movie_avgs, by='movieId') %>%
-                         left_join(user_avgs, by='userId') %>% 
-                         group_by(genres) %>% summarise(b_g = mean(rating - mu_hat - b_i - b_u))
- 
-bg_combined <-  validation_genres %>% #filter(movieId ==1 & userId ==989) %>%
-          left_join(movie_avgs,by='movieId') %>%
-          left_join(user_avgs,by='userId') %>%
-          left_join(genre_avgs, by="genres") %>%
-          mutate(b_g= ifelse(is.na(b_g),0,b_g)) %>%
-          group_by(movieId,userId) %>% 
-          summarise(b_g_combined = sum(b_g)) %>% pull(b_g_combined)
+                         left_join(user_avgs, by='userId') %>%
+                         group_by(genres) %>% 
+                         summarise(b_g = mean(rating - mu - b_i - b_u))
+#on the test set, calculate rating using genre effect
+pred_with_genre_effect <-  test_genres %>% 
+                
+                left_join(movie_avgs,by='movieId') %>%
+                left_join(user_avgs,by='userId') %>%
+                left_join(genre_avgs, by="genres") %>%
+                mutate(pred = mu + b_i + b_u + b_g) %>%
+                pull(pred)
 
 
-pred_with_genre_effect <-  mu_hat + bi + bu + bg_combined
-# 
-# #RMSE when combined genre bias
-# 
-genre_effect <-RMSE(pred_with_genre_effect, validation$rating)
+
+#RMSE when combined genre bias# 
+genre_effect <-RMSE(pred_with_genre_effect, test_set$rating)
 
 genre_effect
 ```
 
-and genre effect visually:
+```{r echo=FALSE,warning=FALSE,message=FALSE}
 
-```{r echo=FALSE}
-genre_avgs %>% ggplot(aes(b_g))+geom_histogram(bins=10, color=I("black"))
+# #Separate train and test set rows for each genre each movie belongs
+# train_genres <- train_set %>% separate_rows(genres) %>% filter(genres != '') 
+# test_genres <- test_set %>% separate_rows(genres) %>% filter(genres != '') 
+# 
+# #ensure genres in test set are also in train set
+# test_genres <- semi_join(test_genres,train_genres, by="genres")
+# 
+# # group by genres to calculate genres effect
+# genre_avgs <- train_genres %>% filter(genres != '') %>%
+#                          left_join(movie_avgs, by='movieId') %>%
+#                          left_join(user_avgs, by='userId') %>%
+#                          group_by(genres) %>% 
+#                          summarise(b_g = mean(rating - mu_hat - b_i - b_u))
+# # each movie belongs to one or multiple genres, we need to sum up all the genres effect a movie belongs to
+# bg_combined <-  test_genres %>% 
+#                 filter(genres != '') %>%
+#                 left_join(movie_avgs,by='movieId') %>%
+#                 left_join(user_avgs,by='userId') %>%
+#                 left_join(genre_avgs, by="genres") %>%
+#                 group_by(movieId,userId) %>% 
+#                 summarise(b_g_combined = sum(b_g)) %>%
+#                 pull(b_g_combined)
+# 
+# 
+# # calculate rating with genre effect
+# pred_with_genre_effect <-  mu_hat + bi + bu + bg_combined
+# # 
+# # #RMSE when combined genre bias# 
+# genre_effect <-RMSE(pred_with_genre_effect, test_set$rating)
+# 
+# genre_effect
 ```
+
+
+
 
 ### Regularization
 
-Finally I will use regularization that will penalize the user and movie bias and shrink them toward 0 when sample sizes are small.
-I will use tuning parameter lambda from 0 to 10 and lambda = 5 gives me the best RMSE. RMSE at lambda = 5:
+Finally I will use regularization to penalize the genre, user and movie bias and shrink them towards 0 when sample sizes are small.
+I will use tuning parameter lambda from 3 to 6.
 
-```{r echo=FALSE, warning=FALSE,message=FALSE}
-lambdas <- seq(0, 10, 0.75)
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+lambdas <- seq(3, 6, 0.25)
 
 rmses <- sapply(lambdas, function(l){
-    
-    movie_reg_avgs <- edx %>%
+    mu <-  mean(train_set$rating)
+    movie_reg_avgs <- train_set %>%
                       group_by(movieId) %>%
-                      summarize(b_i = sum(rating - mu_hat)/(n()+l), n_i = n())
+                      summarize(b_i = sum(rating - mu)/(n()+l))
 
-    user_reg_avgs <- edx %>% left_join(movie_reg_avgs, by="movieId") %>%
+    user_reg_avgs <- train_set %>% left_join(movie_reg_avgs, by="movieId") %>%
                       group_by(userId) %>%
-                      summarize(b_u = sum(rating - mu_hat - b_i)/(n()+l), n_i = n())
+                      summarize(b_u = sum(rating - mu - b_i)/(n()+l))
     
-    predicted_ratings <- validation %>%
+    genre_reg_avgs <- train_set %>% 
+                         left_join(movie_reg_avgs, by='movieId') %>%
+                         left_join(user_reg_avgs, by='userId') %>%
+                         group_by(genres) %>% 
+                         summarise(b_g = sum(rating - mu - b_i - b_u)/(n()+l))
+    
+    predicted_ratings <- test_set %>%
                                 left_join(movie_reg_avgs, by='movieId') %>%
                                 left_join(user_reg_avgs, by='userId') %>%
-                                mutate(pred = mu_hat + b_i + b_u) %>%
+                                left_join(genre_reg_avgs, by='genres') %>%
+                                mutate(pred = mu + b_i + b_u+b_g) %>%
                                 pull(pred)
     
-   RMSE(predicted_ratings, validation$rating)
+   RMSE(predicted_ratings, test_set$rating)
 })
 qplot(lambdas, rmses)
-#lambdas[which.min(rmses)]
-reg_movie_user_effect <- min(rmses)
-reg_movie_user_effect
+```
+
+
+lambda that minimizes RMSE:
+
+```{r echo=FALSE, message=FALSE, warning=FALSE }
+lambdas[which.min(rmses)]
+
+```
+
+RMSE for regularized  movie, user and genre effect on the test set:
+
+```{r echo=FALSE,warning=FALSE,message=FALSE}
+reg_movie_user_genre_effect <- min(rmses)
+reg_movie_user_genre_effect
 ```
 
 
 # Result
 
-From the analysis above we can see that the RMSE keeps getting better as we include user effect, movie effect and genre effect in the algorithm and regularization makes it perform even better.
+From the analysis above we can see that the RMSE keeps getting better as we include user effect, movie effect and genre effect in the model and regularization makes it perform even better. Below is the table that shows RMSEs achieved in different models when testing on the test set (20% of edx set)
 
 ```{r echo=FALSE,warning=FALSE,message=FALSE}
-data.frame("Method"=c('Just Avg', 'Movie Effect', 'User Effect', 'Genre Effect', 'Regularized Movie + User Effect'), "RMSE"= c(just_avg, movie_effect, user_effect, genre_effect,reg_movie_user_effect ))
+data.frame("Method"=c('Just Avg', 'Movie Effect', 'User Effect', 'Genre Effect', 'Regularized Movie + User + Genres Effect'), "RMSE"= c(just_avg, movie_effect, user_effect, genre_effect,reg_movie_user_genre_effect ))
+
+```
+
+We can see regularized model with movie, user and genre effect gives us the best RMSE on the test set (20% of edx set), so this is our preferred model.
+
+I will apply the regularized model on the validation set to calculate the final RMSE.
+
+### Final RMSE
+
+Final RMSE will be calculated on the validation set. I will use the lambda = 4.75 on the validation set.
+
+Final RMSE on validation set:
+
+```{r echo=FALSE,warning=FALSE,message=FALSE}
+
+lambda <- 4.75
+mu_edx <-  mean(edx$rating)
+movie_reg_avgs <- edx %>%
+                  group_by(movieId) %>%
+                  summarize(b_i = sum(rating - mu_edx)/(n()+lambda))
+
+user_reg_avgs <- edx %>% left_join(movie_reg_avgs, by="movieId") %>%
+                  group_by(userId) %>%
+                  summarize(b_u = sum(rating - mu_edx - b_i)/(n()+lambda))
+
+genre_reg_avgs <-    edx %>% 
+                     left_join(movie_reg_avgs, by='movieId') %>%
+                     left_join(user_reg_avgs, by='userId') %>%
+                     group_by(genres) %>% 
+                     summarise(b_g = sum(rating - mu_edx - b_i - b_u)/(n()+lambda))
+
+predicted_ratings <- validation %>%
+                            left_join(movie_reg_avgs, by='movieId') %>%
+                            left_join(user_reg_avgs, by='userId') %>%
+                            left_join(genre_reg_avgs, by='genres') %>%
+                            mutate(pred = mu_edx + b_i + b_u+b_g) %>%
+                            pull(pred)
+RMSE(predicted_ratings, validation$rating)
 
 ```
 
 
 # Conclusion
 
-In summary, regularization has improved the prediction algorithm and produced the best RMSE. But this model does not cater for user movie preferences or movie rating pattern. Future work can be done in this area by doing factor analysis using Matrix factorization. 
+In summary, regularization has improved the prediction algorithm and produced the best RMSE (0.8644514) on the validation set. One limitation of this model is that it does not cater for user movie preferences or movie rating pattern. Future work can be done in this area by doing factor analysis using Matrix factorization. 
