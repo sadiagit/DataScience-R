@@ -17,6 +17,8 @@ if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-
 if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
 if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
 if(!require(mlbench)) install.packages("mlbench", repos = "http://cran.us.r-project.org")
+if(!require(matrixStats)) install.packages("matrixStats", repos = "http://cran.us.r-project.org")
+if(!require(dplyr)) install.packages("dplyr", repos = "http://cran.us.r-project.org")
 
 
 library(tidyverse)
@@ -25,42 +27,60 @@ library(data.table)
 library(matrixStats)
 library(dplyr)
 library(mlbench)
-library(rmarkdown)
 
 data("Sonar")
-
 
 ```
 
 # Introduction
 
-In this project we will use Sonar data from mlbench package. This is the data set used by Gorman and Sejnowski in their study of the classification of sonar signals using a neural network. Using this data set, we will train some machine learning models to classify sonar signals those bounced off a metal cylinder and those bounced off a roughly cylindrical rock. We will perform the model fitting on scaled raw data as well as PCA transformed data. We will choose the best performing model by analyzing their accuracy.
+In this project we will use Sonar data from mlbench package. This is the data set used by Gorman and Sejnowski in their study of the classification of sonar signals using a neural network. Using this data set, we will train few classification machine learning models to classify sonar signals those bounced off a metal cylinder and those bounced off a roughly cylindrical rock. We will perform the model fitting on scaled data. We will choose the best performing model by analyzing their accuracy.
 
-# Data Analysis
+# Analysis
 
-Sonar data set is a data frame of 208 rows and 60 feature variables and a response variable.Approximately 47% of the sample are Rocks and 53% are Mines. This data set does not have any missing values.
+
+### Data Exploration
+
+Sonar data set is a data frame of 208 rows and 60 feature variables and a response variable.
+
 
 ```{r}
 head(Sonar)
 ```
 
-### Plots and Principal Component Analysis
+### Principal Component Analysis
+
 As there are 60 predictors in this data set, principal component analysis seems appropriate for this data set.
+
+```{r warning=FALSE, message=FALSE}
+dim(Sonar)
+```
+
+This data set has two categories in response variable. The signals are to be classified into these two categories:
+
+```{r warning=FALSE, message=FALSE}
+unique(Sonar$Class)
+```
+
+This data set does not have any missing values.
+
+```{r warning=FALSE, message=FALSE}
+any(is.na(Sonar))
+```
+
+Approximately 47% of the sample are Rocks and 53% are Mines. 
+
+```{r warning=FALSE, message=FALSE}
+Sonar %>% group_by(Class) %>% 
+    summarise(n=n()) %>% 
+    mutate( prop=n/sum(n))
+```
 
 In order to do principal component analysis, first we need to scale the matrix. After Scaling, the column mean for the first column is: 1.025822e-17 and standard deviation: 1.
 
-
 ```{r include=FALSE}
-dim(Sonar)
-
-unique(Sonar$Class)
-any(is.na(Sonar))
-
-mean(Sonar$Class == 'M')
-
 #converting the data frame to a matrix for PCA
 x <- Sonar[, 1:60] %>% as.matrix()
-
 
 # scale the feature matrix
 x_centered <- sweep(x, 2, colMeans(x))
@@ -72,36 +92,26 @@ colSds(scaled_X)
 # principal components
 pca <- prcomp(scaled_X)
 
-
 ```
 
 Then we perform the principal component analysis on the scaled matrix. In order to explain 95% of variance we need 30 PCs.
+Below is the summary of variable importance: 
 
 ```{r echo=FALSE}
 summary(pca)$importance[, 1:30]
 ```
 
-Below are the plots for first 2 PCs to see how they explain the variance. Although there is not much variability explained but we can somewhat say Mines have higher PC1 value and Rocks have higher PC2 values. 
+### Plots 
+
+Below is the plot for first 2 PCs to see how they explain the variance. Although PC1 and PC2 are not enough to distinguish between Mine and Rock but from the plot we can see Mines have higher PC1 value and Rocks have higher PC2 values. 
 
 ```{r echo=FALSE}
 
 data.frame(pca$x[,1:2], class=Sonar$Class) %>% 
-ggplot(aes(PC1,PC2, col = class))+
-geom_point() +
-coord_fixed(ratio = 1)
-
-# fviz_pca_ind(pca, geom.ind = "point", pointshape = 21, 
-#              pointsize = 2, 
-#              fill.ind = Sonar$Class, 
-#              col.ind = "black", 
-#              palette = "jco", 
-#              addEllipses = TRUE,
-#              label = "var",
-#              col.var = "black",
-#              repel = TRUE,
-#              legend.title = "Sonar") +
-#   ggtitle("2D PCA-plot from 60 feature dataset") +
-#   theme(plot.title = element_text(hjust = 0.5))
+    ggplot(aes(PC1,PC2, col = class))+
+    geom_point() +
+    coord_fixed(ratio = 1)+
+     stat_ellipse(type="norm", lwd = 1.5)
 
 ```
 
@@ -109,70 +119,109 @@ Also plot for first 10 PCs:
 
 ```{r echo=FALSE}
 
-data.frame(pca$x[,1:10], class=Sonar$Class) %>% gather(PCs,Value, -class) %>%
-ggplot(aes(PCs,Value, fill = class))+
-geom_boxplot()
+data.frame(pca$x[,1:10], class=Sonar$Class) %>% 
+    gather(PCs,Value, -class) %>%
+    ggplot(aes(PCs,Value, fill = class))+
+    geom_boxplot()
 
 ```
-In the lot above,PCs are overlapping, but we can say PC1 ad PC2 explains most of the variability.
 
 
-### Modelling on scaled dataset
+In the plot above, we can see PCs are overlapping, but we can say PC1 ad PC2 explains most of the variability.
 
-Now We will fit logistic, LDA, KNN and Random forest models to the scaled dataset. First we will split the scaled dataset to 80% train set and 20% test set. 
 
-```{r include=FALSE}
+## Modeling
+
+Now we will fit logistic, LDA, KNN and Random forest models to the scaled data set. 
+
+First we will split the scaled data set to 80% train set and 20% test set. 80/20 split has been made to be able to train the model with as much data as possible at the same time having a decent amount data for testing. 
+
+```{r include=FALSE, warning=FALSE}
 set.seed(1, sample.kind = "Rounding")
 test_index <- createDataPartition(Sonar$Class, times = 1, p = 0.2, list = FALSE)
 test_x <- scaled_X[test_index,]
 test_y <- factor(Sonar$Class[test_index])
 train_x <- scaled_X[-test_index,]
 train_y <- factor(Sonar$Class[-test_index])
+```
 
-#logistic
+
+### Logistic Regression
+
+Logistic regression is used to predict the categorical dependent variable with the help of independent variables.
+The output of Logistic Regression problem can be only between the 0 and 1. This is our first model to be used to classify the sonar signals.
+
+```{r warning=FALSE, message=FALSE}
 train_glm <- train(train_x, train_y,method = "glm")
 pred_glm <-  predict(train_glm,  test_x)
 acc_glm <- confusionMatrix(pred_glm,test_y)$overall['Accuracy']
+acc_glm
+```
+
+### LDA
+
+LDA makes predictions by estimating the probability that a new set of inputs belongs to each class. The class that gets the highest probability is the output class and a prediction is made. LDA model is used in this data set as it can handle continuous independent variable and a categorical dependent variable. 
 
 
-# LDA
+```{r echo=FALSE,warning=FALSE, message=FALSE}
 set.seed(5, sample.kind = "Rounding")
+```
 
+```{r warning=FALSE, message=FALSE}
 train_lda <- train(train_x, train_y, method = "lda")
 pred_lda <-  predict(train_lda,  test_x)
 acc_lda <- confusionMatrix(pred_lda,test_y)$overall['Accuracy']
+acc_lda
 ```
 
-For KNN, we are using tuning parameter k from 3 to 21. The best accuracy is achieved at k = 3.
+### KNN
 
-```{r echo = FALSE, warning=FALSE}
-#KNN
+KNN algorithm can be used for classification where input consists of the k closest training examples in data set and output is a class membership. An object is classified by the majority vote it gets by its neighbors. The object is assigned to the class most common among its k nearest neighbors. KNN algorithm is a good choice for this data set as the distance between signals from two rocks will be closer than distance between signals from a rock and a mine. 
+
+For KNN, I am using tuning parameter k from 3 to 21 and the default cross validation is performed by taking 25 bootstrap samples comprised of 25% of the observations
+
+```{r echo=FALSE,warning=FALSE, message=FALSE}
+
 set.seed(7, sample.kind = "Rounding")
-
+```
+```{r warning=FALSE, message=FALSE}
 train_knn <- train(train_x, train_y, method = "knn", tuneGrid = data.frame(k=c(3:21)))
 pred_knn <-  predict(train_knn,  test_x)
 acc_knn <- confusionMatrix(pred_knn,test_y)$overall['Accuracy']
+
+acc_knn
 train_knn$bestTune
+ggplot(train_knn, highlight = TRUE)
 ```
 
-For random forest,the best accuracy is achieved at mtry = 3 and most important variable is V12.
+### Random Forest
 
-```{r echo=FALSE, warning=FALSE}
-#Random Forest
+Random forest consists of a large number of individual decision trees that operate as an ensemble. Each individual tree in the random forest spits out a class prediction and the class with the most votes becomes the prediction of our model.
+Random forest allows each individual tree to randomly sample from the data set with replacement, resulting in different trees. This process is known as bagging. For this reason Random forest is also a good choice to make our predictions in this data set.
+
+For Random forest, tune grid parameter is mtry (number of variables randomly sampled as candidates at each split) with values from 3 to 13.
+The best accuracy is achieved at mtry = 3 and most important variable is V12.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE}
+
 set.seed(7, sample.kind = "Rounding")
-
-train_rf <- train(train_x, train_y, method = "rf", tuneGrid = data.frame(mtry=c(3, 5, 7, 9, 11, 13)), importance=TRUE)
+```
+```{r message=FALSE, warning=FALSE}
+train_rf <- train(train_x, train_y, method = "rf", 
+                  tuneGrid = data.frame(mtry=c(3, 5, 7, 9, 11, 13)), importance=TRUE)
 pred_rf <-  predict(train_rf,  test_x)
 acc_rf <- confusionMatrix(pred_rf,test_y)$overall['Accuracy']
 
 train_rf$bestTune
 varImp(train_rf)
+ggplot(train_rf, highlight = TRUE)
 ```
 
+### Ensemble 
 
-We also combined all above models prediction to create an ensemble.
+We also combined all above model predictions to create an ensemble and calculate the accuracy of our prediction.
 
-```{r echo=FALSE}
+```{r warning=FALSE, message=FALSE}
 #ensemble
 c_preds<- cbind(glm = pred_glm, lda =pred_lda, knn = pred_knn, rf = pred_rf)
 
@@ -180,71 +229,22 @@ ensem <- ifelse(rowMeans(c_preds == 1) > 0.5, 'M', 'R')
 
 acc_ens <- mean(ensem == test_y)
 
-
+acc_ens
 ```
 
-
-### Modelling on PCA transformed Data
-
-Here we performed the same analysis above but on PCA transformed data to see if we get better accuracy for this dataset. We will take the first 30 PCs (explain 95% variability).
-
-```{r echo=FALSE, warning=FALSE}
-
-sonar_pca <- pca$x[, 1:30]
-test_index <- createDataPartition(Sonar$Class, times = 1, p = 0.2, list = FALSE)
-test_x_pca <- sonar_pca[test_index,]
-test_y_pca <- factor(Sonar$Class[test_index])
-train_x_pca <- sonar_pca[-test_index,]
-train_y_pca <- factor(Sonar$Class[-test_index])
-
-set.seed(11, sample.kind = "Rounding")
-
-train_glm_pca <- train(train_x_pca, train_y_pca,method = "glm")
-pred_glm_pca <-  predict(train_glm_pca,  test_x_pca)
-acc_glm_pca <- confusionMatrix(pred_glm_pca,test_y_pca)$overall['Accuracy']
-
-set.seed(13, sample.kind = "Rounding")
-
-train_lda_pca <- train(train_x_pca, train_y_pca,method = "lda")
-pred_lda_pca <-  predict(train_lda_pca,  test_x_pca)
-acc_lda_pca <- confusionMatrix(pred_lda_pca,test_y_pca)$overall['Accuracy']
-
-set.seed(15, sample.kind = "Rounding")
-
-train_knn_pca <- train(train_x_pca, train_y_pca,method = "knn", tuneGrid = data.frame(k=c(3:21)))
-pred_knn_pca <-  predict(train_knn_pca,  test_x_pca)
-acc_knn_pca <- confusionMatrix(pred_knn_pca,test_y_pca)$overall['Accuracy']
-
-set.seed(17, sample.kind = "Rounding")
-
-train_rf_pca <- train(train_x_pca, train_y_pca,method = "rf", tuneGrid = data.frame(mtry=c(3,5,7,9)), importance=TRUE)
-pred_rf_pca <-  predict(train_rf_pca,  test_x_pca)
-acc_rf_pca <- confusionMatrix(pred_rf_pca,test_y_pca)$overall['Accuracy']
-```
 
 # Results
 
 Now we can compare the results of different models and their accuracy.
 
-## Model Result (Raw data)
-
-Below is the accuracy table when models fitted on non PCA'ed data:
+Below is the accuracy table summary:
 
 ```{r echo=FALSE, warning=FALSE}
-data.frame(glm=acc_glm, lda=acc_lda, knn=acc_knn, rf=acc_rf, ensem = acc_ens)
-```
-
-## Model Result (PCA tranformed data)
-
-Below is the accuracy table when models fitted on PCA transformed data:
-
-```{r echo=FALSE, warning=FALSE}
-data.frame(glm_pca=acc_glm_pca, lda_pca=acc_lda_pca, knn_pca=acc_knn_pca, rf_pca=acc_rf_pca)
-
+data.frame("Method"= c('Logistic','LDA','KNN','Random Forest','Ensemble') ,"Accuracy" =c(acc_glm, acc_lda, acc_knn, acc_rf, acc_ens))
 ```
 
 
-It looks like on pca transformed data the models don't fit well. This is expected as the first PC did not explain much of the variability. KNN has the highest accuracy in both analysis, so it is the preferred model for this data set. 
+KNN has the highest accuracy in this analysis with k value 3, so it is the preferred model for this data set. 
 
 
 # Conclusion
