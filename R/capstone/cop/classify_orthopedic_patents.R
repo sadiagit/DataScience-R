@@ -1,4 +1,5 @@
 
+
 if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
 if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
 if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
@@ -15,14 +16,26 @@ library(matrixStats)
 library(dplyr)
 library(corrplot)
 
+
+### SET WORKING DIRECTORY ###
+
+#if in rstudio
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+
+
+# use below if in r for windows
+#setwd(getSrcDirectory()[1])
+
 # Methods
 
 
 ### Data Exploration
 
-#The data set used in this project can be found in https://www.kaggle.com/uciml/biomechanical-features-of-orthopedic-patients. This data set has 310 rows and 7 columns. There are 6 features and 1 response variable. There are no missing values in the data set.
+#The data set used in this project can be found in https://www.kaggle.com/uciml/biomechanical-features-of-orthopedic-patients.
+#This data set has 310 rows and 7 columns. There are 6 features and 1 response variable.
+#There are no missing values in the data set.
 
-df <-  read.csv("ortho_patient.csv")
+df <-  read.csv('ortho_patient.csv')
 dim(df)
 any(is.na(df))
 
@@ -36,11 +49,10 @@ unique(df$class)
 
 #Below is the table that shows the proportion of patients in each class:
 
-prop_her<- mean(df$class == 'Hernia')
-prop_normal <- mean(df$class == 'Normal')
-prop_spon <- mean(df$class == 'Spondylolisthesis')
 
-data.frame("Class"= c('Hernia','Normal','Spondylolisthesis') ,"Prop" =c(prop_her, prop_normal, prop_spon))
+df %>% group_by(class) %>%
+    summarise(n=n()) %>%
+    mutate( prop=n/sum(n))
 
 
 ## Plots
@@ -74,19 +86,21 @@ summary(pca)$importance
 #We can plot the first two PCS to see how they explain the variability:
 
 data.frame(pca$x[,1:2], class=df$class) %>%
-  ggplot(aes(PC1,PC2, col = class))+
-  geom_point() +
-  coord_fixed(ratio = 1)
+    ggplot(aes(PC1,PC2, col = class))+
+    geom_point() +
+    coord_fixed(ratio = 1)+
+    stat_ellipse(type="norm", lwd = 1.5)
 
 #We can also plot the first 10 PCs:
 
-data.frame(pca$x[,1:6], class=df$class) %>% gather(PCs,Value, -class) %>%
-  ggplot(aes(PCs,Value, fill = class))+
-  geom_boxplot()
+data.frame(pca$x[,1:6], class=df$class) %>%
+    gather(PCs,Value, -class) %>%
+    ggplot(aes(PCs,Value, fill = class))+
+    geom_boxplot()
 
 
 
-## Modelling
+## Modeling
 
 set.seed(1, sample.kind = "Rounding")
 
@@ -115,7 +129,7 @@ acc_lda <- confusionMatrix(pred_lda,test_y)$overall['Accuracy']
 
 
 
-### K Nearest Neighbours
+### K Nearest Neighbors
 
 set.seed(7, sample.kind = "Rounding")
 
@@ -124,9 +138,10 @@ train_knn <- train(train_x, train_y, method = "knn", tuneGrid = data.frame(k=c(1
 pred_knn <-  predict(train_knn,  test_x)
 acc_knn <- confusionMatrix(pred_knn,test_y)$overall['Accuracy']
 
+#bets performing k value
 train_knn$bestTune
 
-#plot KNN
+#plot KNN accuracy against k neighbors
 ggplot(train_knn, highlight = TRUE)
 
 
@@ -147,7 +162,7 @@ acc_svm <- confusionMatrix(pred_svm,test_y)$overall['Accuracy']
 #best tune
 train_svm$bestTune
 
-#plot
+#cost vs accuracy plot
 ggplot(train_svm, highlight = TRUE)
 
 
@@ -158,22 +173,22 @@ set.seed(9, sample.kind = "Rounding")
 
 #For Random forest, tune grid parameter is mtry with values from 3 to 13.
 train_rf <- train(train_x, train_y, method = "rf",
-                  tuneGrid = data.frame(mtry=c(3, 5, 7, 9, 11, 13)), importance=TRUE)
+                  tuneGrid = data.frame(mtry=c(3:13)), importance=TRUE)
 
 pred_rf <-  predict(train_rf,  test_x)
 
 acc_rf <- confusionMatrix(pred_rf,test_y)$overall['Accuracy']
 
-#plot
+#plot accuracy against randomly selected variables
 ggplot(train_rf, highlight = TRUE)
 
+# variable importance of features for each category
 varImp(train_rf)
 
 
 
 # Results
-
-data.frame("Method"= c('lda','knn','rf','svm_linear') ,"Accuracy" =c( acc_lda, acc_knn, acc_rf, acc_svm))
+data.frame("Method"= c('LDA','KNN','Random Forest','SVM') ,"Accuracy" =c( acc_lda, acc_knn, acc_rf, acc_svm))
 
 
 
