@@ -13,6 +13,7 @@ library(matrixStats)
 library(dplyr)
 library(mlbench)
 
+# Sonar data from mlbench
 data("Sonar")
 
 ### Data Exploration
@@ -74,7 +75,7 @@ data.frame(pca$x[,1:10], class=Sonar$Class) %>%
 ### Modeling
 set.seed(1, sample.kind = "Rounding")
 
-#80/20 data split to train and test set respectively
+#80/20 data split of data set to train and test set respectively
 test_index <- createDataPartition(Sonar$Class, times = 1, p = 0.2, list = FALSE)
 test_x <- scaled_X[test_index,]
 test_y <- factor(Sonar$Class[test_index])
@@ -135,7 +136,7 @@ ggplot(train_rf, highlight = TRUE)
 #combine all above predictions
 c_preds<- cbind(glm = pred_glm, lda =pred_lda, knn = pred_knn, rf = pred_rf)
 
-# if more than 50% models predict M then predict 'M', otherwise predict 'R'
+# if more than 50% models predicted M then predict 'M', otherwise predict 'R'
 ensem <- ifelse(rowMeans(c_preds == 1) > 0.5, 'M', 'R')
 
 ## calc accuracy
@@ -145,6 +146,6 @@ acc_ens
 
 ### Results
 
-## Model Result (Raw data)
+## Model Result
 data.frame("Method"= c('glm','lda','knn','rf','ensemble') ,"Accuracy" =c(acc_glm, acc_lda, acc_knn, acc_rf, acc_ens))
 

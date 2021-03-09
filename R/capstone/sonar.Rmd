@@ -28,6 +28,7 @@ library(matrixStats)
 library(dplyr)
 library(mlbench)
 
+# Sonar Data from mlbench
 data("Sonar")
 
 ```
